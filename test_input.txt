@@ -1,0 +1,19 @@
+printenv PATH
+setenv PATH bin
+printenv PATH
+setenv PATH bin:npbin
+printenv PATH
+
+
+
+printenv LANG
+
+
+
+printenv VAR1
+
+
+setenv VAR1 test
+
+
+printenv VAR1    
