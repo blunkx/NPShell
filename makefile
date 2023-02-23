@@ -3,7 +3,7 @@
 
 # clean:
 # 	rm -f *.o npshell
-current_dir = $(shell pwd)
+CURRENT_DIR = $(shell pwd)
 DIR_INC = ./include
 DIR_SRC = ./source
 DIR_OBJ = ./obj
