@@ -12,64 +12,45 @@ void print_env(const char *const para)
         cout << cur_env << endl;
 }
 
-void exe_bin(vector<string> tokens)
+char **vector_to_c_str_arr(vector<string> cmd)
 {
-    pid_t pid;
-    int status;
-    for (vector<string>::iterator it = tokens.begin(); it != tokens.end(); it++)
+    char **arr = (char **)malloc((cmd.size() + 1) * sizeof(char *));
+    for (int i = 0; i < cmd.size(); i++)
     {
-        // if token is command
-        //      iter until next command or pipe
-        // else
-        //      discard and show in stderr
-        //      dash(ex: -n) => arg for previous command(including unkhown) => discard it
-        // cout << *it << endl;
+        arr[i] = strdup((cmd[i]).c_str());
+    }
+    arr[cmd.size()] = NULL;
+    return arr;
+}
+
+void exe_bin(vector<vector<string>> cmds)
+{
+    int status;
+    for (vector<vector<string>>::iterator it = cmds.begin(); it != cmds.end(); it++)
+    {
+        pid_t pid;
         pid = fork();
         if (pid == -1)
         {
+            cerr << "fork error!\n";
         }
         else if (pid == 0)
         {
-            const char executable[] = "/bin/ls";
-            execl("/bin/ls", executable, "/", NULL);
+            char **args = vector_to_c_str_arr(*it);
+            if (execvp(args[0], args) == -1)
+            {
+                // Q will memory space recycle>?
+                perror("Error: ");
+                cerr << "Unknown command: {" << args[0] << "}.\n";
+                exit(EXIT_FAILURE);
+            }
+        }
+        else
+        {
+            waitpid(pid, &status, 0); // wait for the child to exit
         }
     }
-    for (vector<string>::iterator it = tokens.begin(); it != tokens.end(); it++)
-        waitpid(0, &status, 0);
+    // for (vector<vector<string>>::iterator it = cmds.begin(); it != cmds.end(); it++)
+    //     waitpid(0, &status, 0);
     return;
 }
-// void exe_bin()
-// {
-//     pid_t pid, status;
-//     pid = fork();
-//     if (pid == -1)
-//     {
-//     }
-//     else if (pid == 0)
-//     {
-//         // std::cout << "par:" << getppid() << std::endl;
-//         // std::cout << "child:" << getpid() << std::endl;
-//         // cout << pid << endl;
-//         /* pid == 0: this is the child process. now let's load the
-//            "ls" program into this process and run it */
-//         const char executable[] = "/bin/ls";
-//         execl(executable, executable, "/", NULL);
-//         // load it. there are more exec__ functions, try 'man 3 exec'
-//         // execl takes the arguments as parameters. execv takes them as an array
-//         // this is execl though, so:
-//         //      exec         argv[0]  argv[1] end
-//     }
-//     else
-//     {
-//         // std::cout << "parent:" << getpid() << std::endl;
-//         // cout << pid << endl;
-//         /* exec does not return unless the program couldn't be started.
-//            when the child process stops, the waitpid() above will return.
-//         */
-//         //  pid != 0: this is the parent process (i.e. our process)
-//         // waitpid(pid, &status, 0); // wait for the child to exit
-//         // std::cout << "parent:" << pid << std::endl;
-//         // std::cout << "end_par" << std::endl;
-//         return;
-//     }
-// }
