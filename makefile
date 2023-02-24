@@ -12,7 +12,7 @@ SRC = $(wildcard $(DIR_SRC)/*.cc)
 OBJ = $(patsubst %.cc, ${DIR_OBJ}/%.o, $(notdir $(SRC)))
 
 CC = g++
-CFLAGS = -g -Wall -I$(DIR_INC) -std=c++17
+CFLAGS = -g -Wall -I$(DIR_INC) -std=c++20
 
 # $@  all target
 # $^  all dependencies
