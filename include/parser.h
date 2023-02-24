@@ -9,10 +9,13 @@
 #include <vector>
 #include <string>
 #include <fstream>
+#include <regex>
 
 #include <sys/stat.h>
 #include <unistd.h>
+
 #include "command.h"
+
 using namespace std;
 
 typedef enum BUILT_IN_COM_T
