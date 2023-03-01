@@ -55,7 +55,6 @@ void exe_bin(vector<vector<string>> cmds)
                 close(p2[0]);
                 close(p2[1]);
                 dup2(stdout_copy, STDOUT_FILENO);
-
                 char **args = vector_to_c_str_arr(*it);
                 if (execvp(args[0], args) == -1)
                 {
@@ -64,6 +63,7 @@ void exe_bin(vector<vector<string>> cmds)
                     cerr << "Unknown command: {" << args[0] << "}.\n";
                     exit(EXIT_FAILURE);
                 }
+                // exit(0);
             }
             else
             {
@@ -82,6 +82,7 @@ void exe_bin(vector<vector<string>> cmds)
                     cerr << "Unknown command: {" << args[0] << "}.\n";
                     exit(EXIT_FAILURE);
                 }
+                // exit(0);
             }
         }
         else
@@ -91,6 +92,7 @@ void exe_bin(vector<vector<string>> cmds)
             close(p1[1]);
             cout << pipe_buff << flush;
             dup2(stdout_copy, STDOUT_FILENO); /*p1 write end isn't used anymore, send EOF*/
+            waitpid(pid, &status, 0);         // wait for the child to exit
             if (it + 1 != cmds.end())
             {
                 memset(pipe_buff, 0, sizeof(pipe_buff));
@@ -98,7 +100,6 @@ void exe_bin(vector<vector<string>> cmds)
             }
             close(p2[0]); // p2 close here
             close(p2[1]);
-            waitpid(pid, &status, 0); // wait for the child to exit
         }
     }
     // for (vector<vector<string>>::iterator it = cmds.begin(); it != cmds.end(); it++)
