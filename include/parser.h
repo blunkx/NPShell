@@ -26,15 +26,6 @@ typedef enum BUILT_IN_COM_T
     EXIT,
 } BUILT_IN_COM_E;
 
-typedef enum TOKEN_TYPE_T
-{
-    F_REDIRE_SYM,
-    PIPE_SYM,
-    ERR_PIPE_SYM,
-    ARG,
-    CMD,
-} TOKEN_TYPE_E;
-
 void parser(string &input);
 
 #endif
