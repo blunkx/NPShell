@@ -1,9 +1,31 @@
 #include "command.h"
 
+string command::which_type()
+{
+    switch (pipe_type)
+    {
+    case NO_PIPE:
+        return "NO_PIPE";
+    case PIPE:
+        return "PIPE";
+    case ERR_PIPE:
+        return "ERR_PIP";
+    case F_RED_PIPE:
+        return "F_RED_PIPE";
+    case NUM_PIPE:
+        return "NUM_PIPE";
+    case ERR_NUM_PIPE:
+        return "ERR_NUM_PIPE";
+    default:
+        return "error";
+    }
+}
+
 void init_env()
 {
     setenv("PATH", "bin:.", true);
 }
+
 void print_env(const char *const para)
 {
     char *cur_env;
@@ -24,7 +46,7 @@ char **vector_to_c_str_arr(vector<string> cmd)
     return arr;
 }
 
-void exe_bin(vector<vector<string>> cmds)
+void exe_bin(vector<command> cmds)
 {
     int status;
     int p1[2];
@@ -32,57 +54,107 @@ void exe_bin(vector<vector<string>> cmds)
     char pipe_buff[100000] = {0};
     // int stdin_copy = dup(STDIN_FILENO);
     int stdout_copy = dup(STDOUT_FILENO);
-    for (vector<vector<string>>::iterator it = cmds.begin(); it != cmds.end(); it++)
+    for (int i = 0; i < cmds.size(); i++)
     {
+        // if (cmds[i].pipe_type == NUM_PIPE || cmds[i].pipe_type == ERR_NUM_PIPE)
+        //     continue;
         pid_t pid;
-        signal(SIGCHLD, SIG_IGN); // wait all child process close
         if (pipe(p1) < 0)
             cerr << "pipe error\n";
         if (pipe(p2) < 0)
             cerr << "pipe error\n";
+
         pid = fork();
         if (pid == -1)
         {
             cerr << "fork error!\n";
+            while (true)
+            {
+                if (waitpid(pid, &status, WNOHANG) == pid)
+                    break;
+            }
+            pid = fork();
         }
         else if (pid == 0)
         {
-            if (it + 1 == cmds.end())
+            if (cmds[i].pipe_type == NO_PIPE)
             {
                 dup2(p1[0], STDIN_FILENO); /*p1 will close after STDIN receive EOF*/
-                close(p1[0]);
-                close(p1[1]);
-                close(p2[0]);
-                close(p2[1]);
-                dup2(stdout_copy, STDOUT_FILENO);
-                char **args = vector_to_c_str_arr(*it);
-                if (execvp(args[0], args) == -1)
-                {
-                    // Q will memory space recycle>?
-                    perror("Error: ");
-                    cerr << "Unknown command: {" << args[0] << "}.\n";
-                    exit(EXIT_FAILURE);
-                }
-                // exit(0);
-            }
-            else
-            {
-                dup2(p1[0], STDIN_FILENO); /*p1 will close after STDIN receive EOF*/
-                dup2(p2[1], STDOUT_FILENO);
 
                 close(p1[0]);
                 close(p1[1]);
                 close(p2[0]);
                 close(p2[1]);
-                char **args = vector_to_c_str_arr(*it);
+                dup2(stdout_copy, STDOUT_FILENO);
+                char **args = vector_to_c_str_arr(cmds[i].cmd);
                 if (execvp(args[0], args) == -1)
                 {
-                    // Q will memory space recycle>?
                     perror("Error: ");
                     cerr << "Unknown command: {" << args[0] << "}.\n";
                     exit(EXIT_FAILURE);
                 }
-                // exit(0);
+            }
+            else if (cmds[i].pipe_type == F_RED_PIPE)
+            {
+                int fd = open(cmds[i].cmd[0].c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+                dup2(fd, STDOUT_FILENO);
+                cout << pipe_buff << flush;
+                if (i < cmds.size() - 1)
+                {
+                    memset(pipe_buff, 0, sizeof(pipe_buff));
+                    read(p2[0], pipe_buff, sizeof(pipe_buff));
+                }
+                close(p1[0]);
+                close(p1[1]);
+                close(p2[0]);
+                close(p2[1]);
+                close(fd);
+                dup2(stdout_copy, STDOUT_FILENO);
+                // dup2(stdin_copy, STDIN_FILENO);
+                exit(0);
+            }
+            else if (cmds[i].pipe_type == PIPE)
+            {
+                dup2(p1[0], STDIN_FILENO); /*p1 will close after STDIN receive EOF*/
+                dup2(p2[1], STDOUT_FILENO);
+                close(p1[0]);
+                close(p1[1]);
+                close(p2[0]);
+                close(p2[1]);
+                char **args = vector_to_c_str_arr(cmds[i].cmd);
+                if (execvp(args[0], args) == -1)
+                {
+                    perror("Error: ");
+                    cerr << "Unknown command: {" << args[0] << "}.\n";
+                    exit(EXIT_FAILURE);
+                }
+            }
+            else if (cmds[i].pipe_type == ERR_PIPE)
+            {
+                dup2(p1[0], STDIN_FILENO); /*p1 will close after STDIN receive EOF*/
+                dup2(p2[1], STDERR_FILENO);
+                dup2(p2[1], STDOUT_FILENO);
+                close(p1[0]);
+                close(p1[1]);
+                close(p2[0]);
+                close(p2[1]);
+                char **args = vector_to_c_str_arr(cmds[i].cmd);
+                if (execvp(args[0], args) == -1)
+                {
+                    perror("Error: ");
+                    cerr << "Unknown command: {" << args[0] << "}.\n";
+                    exit(EXIT_FAILURE);
+                }
+            }
+            else
+            {
+                dup2(p1[0], STDIN_FILENO); /*p1 will close after STDIN receive EOF*/
+                dup2(p2[1], STDOUT_FILENO);
+                close(p1[0]);
+                close(p1[1]);
+                close(p2[0]);
+                close(p2[1]);
+                exit(0);
             }
         }
         else
@@ -92,17 +164,17 @@ void exe_bin(vector<vector<string>> cmds)
             close(p1[1]);
             cout << pipe_buff << flush;
             dup2(stdout_copy, STDOUT_FILENO); /*p1 write end isn't used anymore, send EOF*/
-            waitpid(pid, &status, 0);         // wait for the child to exit
-            if (it + 1 != cmds.end())
+            close(p2[1]);
+            waitpid(pid, &status, 0); // wait for the child to exit
+            if (i < cmds.size() - 1)
             {
                 memset(pipe_buff, 0, sizeof(pipe_buff));
                 read(p2[0], pipe_buff, sizeof(pipe_buff));
             }
             close(p2[0]); // p2 close here
-            close(p2[1]);
         }
     }
-    // for (vector<vector<string>>::iterator it = cmds.begin(); it != cmds.end(); it++)
+    // for (int i = 0; i < cmds.size(); i++)
     //     waitpid(0, &status, 0);
     return;
 }
