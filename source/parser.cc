@@ -1,10 +1,5 @@
 #include "parser.h"
 
-// bool is_valid_command(const string &token)
-// {
-
-// }
-
 BUILT_IN_COM_E is_built_in_command(const vector<string> tokens)
 {
     /*
@@ -21,99 +16,80 @@ BUILT_IN_COM_E is_built_in_command(const vector<string> tokens)
     else
         return NOT_BUILT_IN;
 }
-TOKEN_TYPE_E which_type(const string &token)
-{
-    struct stat buffer;
-    if (stat(token.c_str(), &buffer) == 0)
-    {
-        return CMD;
-    }
-    else
-        return ARG;
-    // if (token == "setenv")
-    //     return SETENV;
-    // else if (token == "printenv")
-    //     return PRINTENV;
-    // else if (token == "exit")
-    //     return EXIT;
-    // else
-    //     return NOT_BUILT_IN;
-}
 
-// bool is_pipe_or_rd(const string &token)
-// {
-//     if (token == "|" || token == "!" || token == ">")
-//         return true;
-//     else
-//         return false;
-// }
-void split_by_pipe(vector<string> &tokens, vector<vector<string>> &cmds)
+void split_by_pipe(vector<string> &tokens, vector<command> &cmds)
 {
     vector<string>::iterator pre_end = tokens.begin();
-    pre_end = tokens.begin();
     for (vector<string>::iterator it = tokens.begin(); it != tokens.end(); it++)
     {
-        if (*it == "|" || *it == "!" || *it == ">")
+        command temp;
+        if (*it == "|")
         {
-            if (pre_end != tokens.begin())
-                pre_end += 1;
-            vector<string> temp(pre_end, it);
+            temp.pipe_type = PIPE;
+            vector<string> temp_cmd(pre_end, it);
+            temp.cmd = temp_cmd;
             cmds.push_back(temp);
-            pre_end = it;
+            pre_end = it + 1;
+        }
+        else if (*it == "!")
+        {
+            temp.pipe_type = ERR_PIPE;
+            vector<string> temp_cmd(pre_end, it);
+            temp.cmd = temp_cmd;
+            cmds.push_back(temp);
+            pre_end = it + 1;
+        }
+        else if (*it == ">")
+        {
+            temp.pipe_type = PIPE;
+            vector<string> temp_cmd(pre_end, it);
+            temp.cmd = temp_cmd;
+            cmds.push_back(temp);
+
+            command temp_frd;
+            temp_frd.pipe_type = F_RED_PIPE;
+            vector<string> fname(it + 1, it + 2);
+            temp_frd.cmd = fname;
+            cmds.push_back(temp_frd);
+            it++;
+            pre_end = it + 1;
+        }
+        else if (std::regex_match((*it), std::regex("\\|\\d+")))
+        {
+            temp.pipe_type = NUM_PIPE;
+            vector<string> temp_cmd(pre_end, it);
+            temp.cmd = temp_cmd;
+            // temp.pipe_num = stoi((*it));
+            cmds.push_back(temp);
+            pre_end = it + 1;
+        }
+        else if (std::regex_match((*it), std::regex("\\!\\d+")))
+        {
+            temp.pipe_type = ERR_NUM_PIPE;
+            vector<string> temp_cmd(pre_end, it);
+            temp.cmd = temp_cmd;
+            // temp.pipe_num = stoi((*it));
+            cmds.push_back(temp);
+            pre_end = it + 1;
         }
         else if (it == tokens.end() - 1)
         {
-            if (*(pre_end) == "|" || *(pre_end) == "!" || *(pre_end) == ">")
-                pre_end += 1;
-            vector<string> temp(pre_end, tokens.end());
+            temp.pipe_type = NO_PIPE;
+            vector<string> temp_cmd(pre_end, tokens.end());
+            temp.cmd = temp_cmd;
             cmds.push_back(temp);
         }
     }
-}
-void split_by_number_pipe(vector<string> &tokens, vector<vector<string>> &num_pipes, vector<vector<string>> &cmds)
-{
-    vector<string>::iterator pre_end = tokens.begin();
-    vector<string> tokens_after_num_pipe;
-    for (vector<string>::iterator it = tokens.begin(); it != tokens.end(); it++)
-    {
-        if (std::regex_match((*it), std::regex("\\|\\d+")))
-        {
-            // cout << *it << endl;
-            // int n = stoi((*it).erase(0, 1));
-            // cout << n << endl;
-            if (pre_end != tokens.begin())
-                pre_end += 1;
-            vector<string> temp(pre_end, it);
-            num_pipes.push_back(temp);
-            pre_end = it;
-        }
-        else if (it == tokens.end() - 1)
-        {
-            if (std::regex_match((*pre_end), std::regex("\\|\\d+")))
-                pre_end += 1;
-            vector<string> temp(pre_end, tokens.end());
-            split_by_pipe(temp, cmds);
-        }
-    }
-    cout << "num_pipe" << endl;
-    for (int i = 0; i < num_pipes.size(); i++)
-    {
-        for (int j = 0; j < num_pipes[i].size(); j++)
-        {
-            cout << "<" << num_pipes[i][j] << "> ";
-        }
-        cout << endl;
-    }
-    cout << "cmds" << endl;
     for (int i = 0; i < cmds.size(); i++)
     {
-        for (int j = 0; j < cmds[i].size(); j++)
+        for (int j = 0; j < cmds[i].cmd.size(); j++)
         {
-            cout << "<" << cmds[i][j] << "> ";
+            cout << "{" << cmds[i].cmd[j] << "} ";
         }
-        cout << endl;
+        cout << cmds[i].which_type() << endl;
     }
 }
+
 void parser(string &input)
 {
     if (input.empty())
@@ -121,14 +97,13 @@ void parser(string &input)
     vector<string> tokens;
     istringstream iss(input);
     copy(istream_iterator<string>(iss), istream_iterator<string>(), back_inserter(tokens));
-    vector<vector<string>> num_pipes;
-    vector<vector<string>> cmds;
-    split_by_number_pipe(tokens, num_pipes, cmds);
+    vector<command> cmds;
+    split_by_pipe(tokens, cmds);
     switch (is_built_in_command(tokens))
     {
     case NOT_BUILT_IN:
         exe_bin(cmds);
-        cout << "out_loop(parent):" << getpid() << endl;
+        // cout << "out_loop(parent):" << getpid() << endl;
         break;
     case SETENV:
         setenv(tokens[1].c_str(), tokens[2].c_str(), true);
