@@ -25,7 +25,7 @@ TARGET = npshell
 ${TARGET}:$(OBJ)
 	$(CC) -o $@ $^
 
-$(DIR_OBJ)/%.o: ${DIR_SRC}/%.cc
+$(DIR_OBJ)/%.o: ${DIR_SRC}/%.cc ${DIR_INC}/%.h
 	mkdir -p $(DIR_OBJ)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
