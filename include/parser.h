@@ -26,6 +26,6 @@ typedef enum BUILT_IN_COM_T
     EXIT,
 } BUILT_IN_COM_E;
 
-void parser(string &input);
+void parser(string &input, vector<command> &number_pipes);
 
 #endif
