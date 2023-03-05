@@ -40,6 +40,6 @@ public:
 
 void init_env();
 void print_env(const char *const para);
-void exe_bin(vector<command> cmds);
+void exe_bin(vector<command> cmds, vector<command> number_pipes);
 
 #endif
