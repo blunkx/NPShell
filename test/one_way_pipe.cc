@@ -6,9 +6,10 @@
 
 int main()
 {
-
+    setenv("PATH", "bin:.", true);
     int p1[2];
     int status;
+    int stdout_copy = dup(STDOUT_FILENO);
     if (pipe(p1) < 0)
         std::cout << "pipe1 create error" << std::endl;
     signal(SIGCHLD, SIG_IGN);
@@ -19,17 +20,18 @@ int main()
         dup2(p1[0], STDIN_FILENO); /*p1 will close after STDIN receive EOF*/
         close(p1[0]);
         close(p1[1]);
+        dup2(stdout_copy, STDOUT_FILENO);
         execlp("cat", "cat", NULL);
-        exit(0);
+        // exit(0);
     }
     else
     {
-        // waitpid(0, &status, 0);
         /*parent process*/
+        close(p1[0]);
         std::cout << "this is parent process!" << std::endl;
         dup2(p1[1], STDOUT_FILENO);
-        close(p1[0]);
+        std::cout << "can u hear me?" << std::endl;
         close(p1[1]);
-        std::cout << "can u hear me?" << std::flush;
+        // waitpid(0, &status, 0);
     }
 }
