@@ -34,6 +34,39 @@ void print_env(const char *const para)
         cout << cur_env << endl;
 }
 
+void print_cmds(vector<command> cmds)
+{
+    for (int i = 0; i < cmds.size(); i++)
+    {
+        for (int j = 0; j < cmds[i].cmd.size(); j++)
+        {
+            cout << "{" << cmds[i].cmd[j] << "} ";
+        }
+        cout << cmds[i].which_type();
+        if (cmds[i].pipe_type == NUM_PIPE || cmds[i].pipe_type == ERR_NUM_PIPE)
+            cout << " " << cmds[i].pipe_num;
+        if (cmds[i].is_exe)
+            cout << " exed";
+        if (cmds[i].is_piped)
+            cout << " piped";
+
+        // if (cmds[i].is_first_cmd)
+        //     cout << " 1st" << endl;
+        // else
+        //     cout << endl;
+        cout << endl;
+    }
+}
+
+inline void reduce_num_pipes(vector<command> &number_pipes, int last)
+{
+    for (int i = 0; i < last; i++)
+    {
+        if (number_pipes[i].pipe_num > 0)
+            number_pipes[i].pipe_num--;
+    }
+}
+
 char **vector_to_c_str_arr(vector<string> cmd)
 {
     char **arr = (char **)malloc((cmd.size() + 1) * sizeof(char *));
@@ -46,57 +79,23 @@ char **vector_to_c_str_arr(vector<string> cmd)
     return arr;
 }
 
-// std::string qx(const std::vector<std::string> &args)
-// {
-//     int output[2];
-//     pipe(output);
-
-//     const pid_t pid = fork();
-//     if (!pid)
-//     {
-//         // collect both stdout and stderr to the one pipe
-//         close(output[0]);
-//         dup2(output[1], STDOUT_FILENO);
-//         dup2(output[1], STDERR_FILENO);
-//         close(output[1]);
-
-//         std::vector<char *> vc(args.size() + 1, NULL);
-//         for (size_t i = 0; i < args.size(); ++i)
-//         {
-//             vc[i] = const_cast<char *>(args[i].c_str());
-//         }
-
-//         execvp(vc[0], &vc[0]);
-//         // if execvp() fails, we do *not* want to call exit()
-//         // since that can call exit handlers and flush buffers
-//         // copied from the parent process
-//         _exit(0);
-//     }
-//     close(output[1]);
-
-//     std::string out;
-//     const int buf_size = 4096;
-//     char buffer[buf_size];
-//     do
-//     {
-//         errno = 0;
-//         const ssize_t r = read(output[0], buffer, buf_size);
-//         if (r > 0)
-//         {
-//             out.append(buffer, r);
-//         }
-//     } while (errno == EAGAIN || errno == EINTR);
-// }
-
-void exe_command(int *p1, int *p2, int stdout_copy, command cmd)
+void exe_command(int stdout_copy, vector<command> &cmds, int i, bool stop_pipe, int temp_fd[])
 {
-    dup2(p1[0], STDIN_FILENO); // stdin refer to p1[0]
-    close(p1[0]);
-    close(p1[1]);
-    close(p2[0]);
-    close(p2[1]);
+    if (stop_pipe)
+    {
+        dup2(temp_fd[0], STDIN_FILENO);
+    }
+    else
+    {
+        dup2(cmds[i - 1].fd[0], STDIN_FILENO);
+        close(cmds[i - 1].fd[0]);
+    }
+    close(temp_fd[0]);
+    close(temp_fd[1]);
+    close(cmds[i].fd[0]);
+    close(cmds[i].fd[1]);
     dup2(stdout_copy, STDOUT_FILENO);
-    char **args = vector_to_c_str_arr(cmd.cmd);
+    char **args = vector_to_c_str_arr(cmds[i].cmd);
     if (execvp(args[0], args) == -1)
     {
         // perror("Error: ");
@@ -105,15 +104,26 @@ void exe_command(int *p1, int *p2, int stdout_copy, command cmd)
     }
 }
 
-void exe_pipe(int *p1, int *p2, int stdout_copy, command cmd)
+void exe_pipe(int stdout_copy, vector<command> &cmds, int i, bool stop_pipe, int temp_fd[])
 {
-    dup2(p1[0], STDIN_FILENO);  // stdin refer to p1[0]
-    dup2(p2[1], STDOUT_FILENO); // stdout refer to p2[1]
-    close(p1[0]);
-    close(p1[1]);
-    close(p2[0]);
-    close(p2[1]);
-    char **args = vector_to_c_str_arr(cmd.cmd);
+    if (stop_pipe)
+    {
+        dup2(temp_fd[0], STDIN_FILENO);
+    }
+    else
+    {
+        dup2(cmds[i - 1].fd[0], STDIN_FILENO);
+        close(cmds[i - 1].fd[0]);
+    }
+    close(temp_fd[0]);
+    close(temp_fd[1]);
+    if (i == 0)
+    {
+        close(cmds[0].fd[0]);
+    }
+    dup2(cmds[i].fd[1], STDOUT_FILENO); // stdout refer to p2[1]
+    close(cmds[i].fd[1]);
+    char **args = vector_to_c_str_arr(cmds[i].cmd);
     if (execvp(args[0], args) == -1)
     {
         // perror("Error: ");
@@ -122,72 +132,204 @@ void exe_pipe(int *p1, int *p2, int stdout_copy, command cmd)
     }
 }
 
-void exe_err_pipe(int *p1, int *p2, int stdout_copy, command cmd)
+void exe_err_pipe(int stdout_copy, vector<command> &cmds, int i, bool stop_pipe, int temp_fd[])
 {
-    dup2(p1[0], STDIN_FILENO); /*p1 will close after STDIN receive EOF*/
-    dup2(p2[1], STDERR_FILENO);
-    dup2(p2[1], STDOUT_FILENO);
-    close(p1[0]);
-    close(p1[1]);
-    close(p2[0]);
-    close(p2[1]);
-    char **args = vector_to_c_str_arr(cmd.cmd);
+    if (stop_pipe)
+    {
+        dup2(temp_fd[0], STDIN_FILENO);
+    }
+    else
+    {
+        dup2(cmds[i - 1].fd[0], STDIN_FILENO);
+        close(cmds[i - 1].fd[0]);
+    }
+    close(temp_fd[0]);
+    close(temp_fd[1]);
+    if (i == 0)
+    {
+        close(cmds[0].fd[0]);
+    }
+    dup2(cmds[i].fd[1], STDERR_FILENO); // stderr refer to p2[1]
+    dup2(cmds[i].fd[1], STDOUT_FILENO); // stdout refer to p2[1]
+    close(cmds[i].fd[1]);
+    char **args = vector_to_c_str_arr(cmds[i].cmd);
     if (execvp(args[0], args) == -1)
     {
-        perror("Error: ");
+        // perror("Error: ");
         cerr << "Unknown command: {" << args[0] << "}.\n";
         exit(EXIT_FAILURE);
     }
 }
 
-void exe_f_red(int *p1, int *p2, int stdout_copy, command cmd, char pipe_buff[])
+void exe_f_red(int stdout_copy, vector<command> &cmds, int i, int temp_fd[])
 {
-    int fd = open(cmd.cmd[0].c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
-    // dup2(p1[0], STDIN_FILENO); need to read and pass to stdout
+    close(temp_fd[0]);
+    close(temp_fd[1]);
+    close(cmds[i].fd[0]);
+    close(cmds[i].fd[1]);
+    if (i > 0)
+    {
+        dup2(cmds[i - 1].fd[0], STDIN_FILENO); // stdin refer to p1[0]
+        close(cmds[i - 1].fd[0]);
+    }
+    else if (i == 0)
+        cerr << "file redirection error!\n";
+    int fd = open(cmds[i].cmd[0].c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
     dup2(fd, STDOUT_FILENO);
-    cout << pipe_buff << flush;
-    close(p1[0]);
-    close(p1[1]);
-    close(p2[0]);
-    close(p2[1]);
     close(fd);
-    dup2(stdout_copy, STDOUT_FILENO); // recover stdout back
-    exit(0);
+    if (execlp("cat", "cat", NULL) == -1)
+    {
+        cerr << "file redirection failed!\n";
+        exit(EXIT_FAILURE);
+    }
 }
 
-void exe_bin(vector<command> cmds, vector<command> number_pipes)
+void exe_num_pipe(int stdout_copy, vector<command> &cmds, int i, bool stop_pipe, int temp_fd[])
+{
+    cout << "xxx" << endl;
+    if (stop_pipe)
+    {
+        cout << "x222" << endl;
+        dup2(temp_fd[0], STDIN_FILENO);
+    }
+    else
+    {
+        cout << "111" << endl;
+        dup2(cmds[i - 1].fd[0], STDIN_FILENO);
+        close(cmds[i - 1].fd[0]);
+    }
+    close(temp_fd[0]);
+    close(temp_fd[1]);
+    dup2(cmds[i].fd[1], STDOUT_FILENO); // stdout refer to p2[1]
+    close(cmds[i].fd[1]);
+    char **args = vector_to_c_str_arr(cmds[i].cmd);
+    if (execvp(args[0], args) == -1)
+    {
+        // perror("Error: ");
+        cerr << "Unknown command: {" << args[0] << "}.\n";
+        exit(EXIT_FAILURE);
+    }
+}
+
+void exe_err_num_pipe(int stdout_copy, vector<command> &cmds, int i, bool stop_pipe, int temp_fd[])
+{
+    if (stop_pipe)
+    {
+        dup2(temp_fd[0], STDIN_FILENO);
+    }
+    else
+    {
+        dup2(cmds[i - 1].fd[0], STDIN_FILENO);
+        close(cmds[i - 1].fd[0]);
+    }
+    close(temp_fd[0]);
+    close(temp_fd[1]);
+    if (i == 0)
+    {
+        close(cmds[0].fd[0]);
+    }
+    dup2(cmds[i].fd[1], STDERR_FILENO); // stdout refer to p2[1]
+    dup2(cmds[i].fd[1], STDOUT_FILENO); // stdout refer to p2[1]
+    close(cmds[i].fd[1]);
+    char **args = vector_to_c_str_arr(cmds[i].cmd);
+    if (execvp(args[0], args) == -1)
+    {
+        // perror("Error: ");
+        cerr << "Unknown command: {" << args[0] << "}.\n";
+        exit(EXIT_FAILURE);
+    }
+}
+
+void exe_bin(vector<command> &cmds)
 {
     int status;
-    int p1[2];
-    int p2[2];
-    char pipe_buff[100000] = {0};
     // int stdin_copy = dup(STDIN_FILENO);
     int stdout_copy = dup(STDOUT_FILENO);
-
-    string num_pp_output;
-    for (int i = number_pipes.size() - 1; i >= 0; i--)
-    {
-        if (number_pipes[i].pipe_num == 0)
-        {
-            cmds.insert(cmds.begin(), number_pipes[i]);
-            if (number_pipes[i].pipe_type == NUM_PIPE)
-                cmds[0].pipe_type = PIPE;
-            else if (number_pipes[i].pipe_type == ERR_NUM_PIPE)
-                cmds[0].pipe_type = ERR_PIPE;
-        }
-    }
-
+    string temp_output;
     for (int i = 0; i < cmds.size(); i++)
     {
-        if (cmds[i].pipe_type == NUM_PIPE || cmds[i].pipe_type == ERR_NUM_PIPE)
-            continue;
+        if (!cmds[i].is_exe)
+        {
+            if (pipe(cmds[i].fd) == -1)
+            {
+                cerr << "pipe error\n";
+                exit(EXIT_FAILURE);
+            }
+        }
+    }
+    // pipe(temp_fd);
+    // for (int i = first_index - 1; i >= 1; i--)
+    // {
+    //     pid_t pid;
+    //     pid = fork();
+    //     if (pid == 0)
+    //     {
+    //         dup2(cmds[i].fd[0], STDIN_FILENO);
+    //         close(cmds[i].fd[0]);
+    //         close(cmds[i].fd[1]);
+    //         dup2(cmds[0].fd[1], STDOUT_FILENO);
+    //         close(cmds[0].fd[1]);
+    //         if (execlp("cat", "cat", NULL) == -1)
+    //         {
+    //             cerr << "file redirection failed!\n";
+    //             exit(EXIT_FAILURE);
+    //         }
+    //     }
+    // }
 
+    bool stop_pipe = true;
+    int temp_fd[2];
+    pipe(temp_fd);
+    for (int i = 0; i < cmds.size(); i++)
+    {
+        reduce_num_pipes(cmds, i);
+        for (int j = 0; j < i; j++)
+        {
+            if (cmds[j].pipe_type == NUM_PIPE || cmds[j].pipe_type == ERR_NUM_PIPE)
+            {
+                if (!cmds[j].is_piped && cmds[j].pipe_num == 0)
+                {
+                    pid_t pid;
+                    pid = fork();
+                    if (pid == -1)
+                    {
+                        cerr << "fork error!\n";
+                        while (true)
+                        {
+                            if (waitpid(pid, &status, WNOHANG) == pid)
+                                break;
+                        }
+                        pid = fork();
+                    }
+                    else if (pid == 0)
+                    {
+                        dup2(cmds[j].fd[0], STDIN_FILENO);
+                        close(cmds[j].fd[0]);
+                        close(cmds[j].fd[1]);
+                        dup2(temp_fd[1], STDOUT_FILENO);
+                        close(temp_fd[0]);
+                        close(temp_fd[1]);
+                        if (execlp("cat", "cat", NULL) == -1)
+                        {
+                            cerr << "cat error\n";
+                            exit(EXIT_FAILURE);
+                        }
+                    }
+                    else
+                    {
+                        cmds[j].is_piped = true;
+                        close(cmds[j].fd[0]);
+                        close(cmds[j].fd[1]);
+                        wait(NULL);
+                    }
+                }
+            }
+        }
+        cout << i << "th pipe" << endl;
+        print_cmds(cmds);
+        cout << endl
+             << endl;
         pid_t pid;
-        if (pipe(p1) < 0)
-            cerr << "pipe error\n";
-        if (pipe(p2) < 0)
-            cerr << "pipe error\n";
-
         pid = fork();
         if (pid == -1)
         {
@@ -201,42 +343,52 @@ void exe_bin(vector<command> cmds, vector<command> number_pipes)
         }
         else if (pid == 0)
         {
-            // child process
+            //  child process
+            for (int j = 0; j < cmds.size(); j++)
+            {
+                if (i - 1 != j)
+                {
+                    close(cmds[j].fd[0]);
+                }
+                // else
+                //     cout << j << " R" << endl;
+                if (i != j)
+                {
+                    close(cmds[j].fd[1]);
+                }
+                // else
+                //     cout << j << " W" << endl;
+            }
+            // cout << endl;
             if (cmds[i].pipe_type == NO_PIPE)
             {
-                exe_command(p1, p2, stdout_copy, cmds[i]);
+                exe_command(stdout_copy, cmds, i, stop_pipe, temp_fd);
             }
             else if (cmds[i].pipe_type == PIPE)
             {
-                exe_pipe(p1, p2, stdout_copy, cmds[i]);
+                exe_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd);
             }
             else if (cmds[i].pipe_type == ERR_PIPE)
             {
-                exe_err_pipe(p1, p2, stdout_copy, cmds[i]);
+                exe_err_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd);
             }
             else if (cmds[i].pipe_type == F_RED_PIPE)
             {
-                exe_f_red(p1, p2, stdout_copy, cmds[i], pipe_buff);
+                exe_f_red(stdout_copy, cmds, i, temp_fd);
             }
             else if (cmds[i].pipe_type == NUM_PIPE)
             {
-                dup2(p1[0], STDIN_FILENO);
-                dup2(p2[1], STDOUT_FILENO);
-                close(p1[0]);
-                close(p1[1]);
-                close(p2[0]);
-                close(p2[1]);
-                exit(0);
+                if (!cmds[i].is_exe)
+                    exe_num_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd);
+                else
+                    exit(EXIT_SUCCESS);
             }
             else if (cmds[i].pipe_type == ERR_NUM_PIPE)
             {
-                dup2(p1[0], STDIN_FILENO);
-                dup2(p2[1], STDOUT_FILENO);
-                close(p1[0]);
-                close(p1[1]);
-                close(p2[0]);
-                close(p2[1]);
-                exit(0);
+                if (!cmds[i].is_exe)
+                    exe_err_num_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd);
+                else
+                    exit(EXIT_SUCCESS);
             }
             else
             {
@@ -246,22 +398,51 @@ void exe_bin(vector<command> cmds, vector<command> number_pipes)
         else
         {
             // parent process
-            dup2(p1[1], STDOUT_FILENO); // stdout refer to p1[1]
-            close(p1[0]);
-            close(p1[1]);
-            cout << pipe_buff << flush;
-            dup2(stdout_copy, STDOUT_FILENO); // recover stdout back
-            close(p2[1]);
-            waitpid(pid, &status, 0); // wait for the child to exit
-            if (i < cmds.size() - 1)
+            // cout << stop_pipe << endl;
+            if (cmds[i].pipe_type == NUM_PIPE || cmds[i].pipe_type == ERR_NUM_PIPE)
             {
-                memset(pipe_buff, 0, sizeof(pipe_buff));
-                read(p2[0], pipe_buff, sizeof(pipe_buff));
+                stop_pipe = true;
             }
-            close(p2[0]);
+            else
+            {
+                stop_pipe = false;
+                cmds[i].is_piped = true;
+            }
+            cmds[i].is_exe = true;
+
+            // close(temp_fd[1]);
+            //  waitpid(pid, &status, 0);
         }
     }
-    // for (int i = 0; i < cmds.size(); i++)
-    //     waitpid(0, &status, 0);
+    close(temp_fd[0]);
+    close(temp_fd[1]);
+    for (int i = 0; i < cmds.size(); i++)
+    {
+        switch (cmds[i].pipe_type)
+        {
+        case NO_PIPE:
+        case PIPE:
+        case ERR_PIPE:
+        case F_RED_PIPE:
+            close(cmds[i].fd[0]);
+            close(cmds[i].fd[1]);
+            break;
+        case NUM_PIPE:
+        case ERR_NUM_PIPE:
+            if (cmds[i].pipe_num == 0)
+            {
+                close(cmds[i].fd[0]);
+                close(cmds[i].fd[1]);
+            }
+            break;
+        default:
+            break;
+        }
+    }
+
+    for (int i = 0; i < cmds.size(); i++)
+    {
+        waitpid(0, &status, 0);
+    }
     return;
 }
