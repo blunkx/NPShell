@@ -34,12 +34,14 @@ private:
 public:
     PIPE_TYPE_E pipe_type;
     int pipe_num = 0;
+    bool is_exe = false;
+    bool is_piped = false;
+    int fd[2];
     vector<string> cmd;
     string which_type();
 };
 
 void init_env();
 void print_env(const char *const para);
-void exe_bin(vector<command> cmds, vector<command> number_pipes);
-
+void exe_bin(vector<command> &cmds);
 #endif
