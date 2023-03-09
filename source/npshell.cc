@@ -9,17 +9,17 @@ int main(int argc, char *const argv[])
 void exe_shell()
 {
     string input;
-    vector<command> number_pipes;
+    vector<command> cmds;
     while (true)
     {
         cout << "% ";
         if (!getline(cin, input).eof())
         {
-            parser(input, number_pipes);
+            parser(input, cmds);
         }
         else
         {
-            parser(input, number_pipes);
+            parser(input, cmds);
             break;
         }
     }
