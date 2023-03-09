@@ -1,53 +1,60 @@
-#include <cctype>
-#include <fstream>
-#include <iomanip>
-#include <iostream>
-#include <vector>
-using namespace std;
+#include <stdio.h>
+#include <stdlib.h>
+#include <memory.h>
+#include <string.h>
+#include <ctype.h>
 
-int main(int argc, char *const argv[])
+int main(int argc, char **argv)
 {
-  ifstream file;
-  if (argc == 2)
-  {
-    file.open(argv[1]);
-    cin.rdbuf(file.rdbuf());
-  }
-  else if (argc > 2)
-  {
-    cerr << "usage: " << argv[0] << " [filename]" << endl;
-  }
+    FILE *fp;
+    char c;
+    int inTag = 0;
+    bool errTag = false;
+    char TagMsg[1024];
+    int iCount = 0;
 
-  char c;
-  bool in_tag = false, is_illegal = false;
-  string tag_name;
-  while (cin.get(c))
-  {
-    switch (c)
+    if (argc == 1)
+        fp = stdin;
+    else if (argc == 2)
+        fp = fopen(argv[1], "r");
+    else
     {
-    case '<':
-      in_tag = true;
-      break;
-    case '>':
-      in_tag = false;
-      break;
-    default:
-      if (in_tag)
-      {
-        tag_name += c;
-        if (!isalpha(c) && c != '/')
-          is_illegal = true;
-      }
-      else
-      {
-        if (is_illegal)
-        {
-          cerr << "Error: illegal tag \"" << tag_name << "\"" << endl;
-          is_illegal = false;
-        }
-        cout.put(c);
-      }
+        fprintf(stderr, "Usage:%s <file>\n", argv[1]);
+        exit(1);
     }
-  }
-  return 0;
+    while ((c = fgetc(fp)) != EOF)
+    {
+        if (c == '<')
+        {
+            inTag = 1;
+            continue;
+        }
+        if (c == '>')
+        {
+            inTag = 0;
+            continue;
+        }
+        if (inTag)
+        {
+            TagMsg[iCount++] = c;
+            if (!isalpha(c) && c != '/')
+                errTag = true;
+        }
+
+        if (!inTag)
+        {
+            if (errTag)
+            {
+                TagMsg[iCount] = '\0';
+                fprintf(stderr, "Error: illegal tag \"%s\"\n", TagMsg);
+                errTag = false;
+            }
+            iCount = 0;
+            memset(TagMsg, '\0', strlen(TagMsg));
+            fputc(c, stdout);
+        }
+    }
+    fflush(stdout);
+    fclose(fp);
+    return (0);
 }
