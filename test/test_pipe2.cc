@@ -39,18 +39,23 @@ int main(int argc, char *argv[])
         {
             // Child process
             int j;
-            for (j = 0; j < PROCESS_NUM + 1; j++)
+            for (j = 0; j < PROCESS_NUM; j++)
             {
                 if (i != j)
                 {
                     close(pipes[j][0]);
                 }
+                else
+                    cout << j << " R" << endl;
+
                 if (i + 1 != j)
                 {
                     close(pipes[j][1]);
                 }
+                else
+                    cout << j << " W" << endl;
             }
-
+            cout << endl;
             if (i == PROCESS_NUM - 1)
             {
                 // std::cout << "exe" << std::endl;
@@ -102,10 +107,14 @@ int main(int argc, char *argv[])
                 }
             }
         }
+        // else
+        // {
+        //     waitpid(0, &status, 0);
+        // }
     }
     // Main process
     int j;
-    for (j = 0; j < PROCESS_NUM + 1; j++)
+    for (j = 0; j < PROCESS_NUM; j++)
     {
         close(pipes[j][0]);
         close(pipes[j][1]);
