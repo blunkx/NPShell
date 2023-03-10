@@ -17,39 +17,6 @@ BUILT_IN_COM_E is_built_in_command(const vector<string> tokens)
         return NOT_BUILT_IN;
 }
 
-// inline void reduce_num_pipes(vector<command> &number_pipes)
-// {
-//     for (int i = 0; i < number_pipes.size(); i++)
-//     {
-//         if (number_pipes[i].pipe_num > 0)
-//             number_pipes[i].pipe_num--;
-//     }
-// }
-
-// void find_first_non_num_pipe_cmd(vector<command> &cmds)
-// {
-//     int max = 0;
-//     bool exist_num_pp = false;
-//     for (int i = 0; i < cmds.size(); i++)
-//     {
-//         //&& (cmds[i].pipe_type == NUM_PIPE || cmds[i].pipe_type == ERR_NUM_PIPE)
-//         if (i >= max && cmds[i].is_exe)
-//         {
-//             exist_num_pp = true;
-//             max = i;
-//         }
-//     }
-//     if (max + 1 < cmds.size() && exist_num_pp)
-//     {
-//         cmds[max + 1].is_first_cmd = true;
-//     }
-//     else if (cmds.size() == 1)
-//     {
-//         cmds[0].is_first_cmd = true;
-//     }
-//     return;
-// }
-
 void split_by_pipe(vector<string> &tokens, vector<command> &cmds)
 {
     vector<string>::iterator pre_end = tokens.begin();
@@ -58,7 +25,6 @@ void split_by_pipe(vector<string> &tokens, vector<command> &cmds)
         command temp;
         if (*it == "|")
         {
-            // reduce_num_pipes(cmds);
             temp.pipe_type = PIPE;
             vector<string> temp_cmd(pre_end, it);
             temp.cmd = temp_cmd;
@@ -67,7 +33,6 @@ void split_by_pipe(vector<string> &tokens, vector<command> &cmds)
         }
         else if (*it == "!")
         {
-            // reduce_num_pipes(cmds);
             temp.pipe_type = ERR_PIPE;
             vector<string> temp_cmd(pre_end, it);
             temp.cmd = temp_cmd;
@@ -76,7 +41,6 @@ void split_by_pipe(vector<string> &tokens, vector<command> &cmds)
         }
         else if (*it == ">")
         {
-            // reduce_num_pipes(cmds);
             temp.pipe_type = PIPE;
             vector<string> temp_cmd(pre_end, it);
             temp.cmd = temp_cmd;
@@ -92,7 +56,6 @@ void split_by_pipe(vector<string> &tokens, vector<command> &cmds)
         }
         else if (std::regex_match((*it), std::regex("\\|\\d+")))
         {
-            // reduce_num_pipes(cmds);
             temp.pipe_type = NUM_PIPE;
             vector<string> temp_cmd(pre_end, it);
             temp.cmd = temp_cmd;
@@ -102,7 +65,6 @@ void split_by_pipe(vector<string> &tokens, vector<command> &cmds)
         }
         else if (std::regex_match((*it), std::regex("\\!\\d+")))
         {
-            // reduce_num_pipes(cmds);
             temp.pipe_type = ERR_NUM_PIPE;
             vector<string> temp_cmd(pre_end, it);
             temp.cmd = temp_cmd;
@@ -112,16 +74,12 @@ void split_by_pipe(vector<string> &tokens, vector<command> &cmds)
         }
         else if (it == tokens.end() - 1)
         {
-            // reduce_num_pipes(cmds);
             temp.pipe_type = NO_PIPE;
             vector<string> temp_cmd(pre_end, tokens.end());
             temp.cmd = temp_cmd;
             cmds.push_back(temp);
         }
     }
-    // find_first_non_num_pipe_cmd(cmds);
-    // cout << "number pipe:" << endl;
-    // print_cmds(number_pipes);
 }
 
 void parser(string &input, vector<command> &cmds)
@@ -131,10 +89,10 @@ void parser(string &input, vector<command> &cmds)
     vector<string> tokens;
     istringstream iss(input);
     copy(istream_iterator<string>(iss), istream_iterator<string>(), back_inserter(tokens));
-    split_by_pipe(tokens, cmds);
     switch (is_built_in_command(tokens))
     {
     case NOT_BUILT_IN:
+        split_by_pipe(tokens, cmds);
         exe_bin(cmds);
         // cout << "out_loop(parent):" << getpid() << endl;
         break;
