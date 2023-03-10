@@ -1,65 +1,9 @@
 #include "command.h"
 
-string command::which_type()
-{
-    switch (pipe_type)
-    {
-    case NO_PIPE:
-        return "NO_PIPE";
-    case PIPE:
-        return "PIPE";
-    case ERR_PIPE:
-        return "ERR_PIP";
-    case F_RED_PIPE:
-        return "F_RED_PIPE";
-    case NUM_PIPE:
-        return "NUM_PIPE";
-    case ERR_NUM_PIPE:
-        return "ERR_NUM_PIPE";
-    default:
-        return "error";
-    }
-}
-
-void init_env()
-{
-    setenv("PATH", "bin:.", true);
-}
-
-void print_env(const char *const para)
-{
-    char *cur_env;
-    cur_env = getenv(para);
-    if (cur_env != NULL)
-        cout << cur_env << endl;
-}
-
-void print_cmds(vector<command> cmds)
-{
-    for (int i = 0; i < cmds.size(); i++)
-    {
-        for (int j = 0; j < cmds[i].cmd.size(); j++)
-        {
-            cout << "{" << cmds[i].cmd[j] << "} ";
-        }
-        cout << cmds[i].which_type();
-        if (cmds[i].pipe_type == NUM_PIPE || cmds[i].pipe_type == ERR_NUM_PIPE)
-            cout << " " << cmds[i].pipe_num;
-        if (cmds[i].is_exe)
-            cout << " exed";
-        if (cmds[i].is_piped)
-            cout << " piped";
-
-        // if (cmds[i].is_first_cmd)
-        //     cout << " 1st" << endl;
-        // else
-        //     cout << endl;
-        cout << endl;
-    }
-}
-
 inline void reduce_num_pipes(vector<command> &number_pipes, int last)
 {
+    if (number_pipes[last].is_exe)
+        return;
     for (int i = 0; i < last; i++)
     {
         if (number_pipes[i].pipe_num > 0)
@@ -174,7 +118,7 @@ void exe_f_red(int stdout_copy, vector<command> &cmds, int i, int temp_fd[])
     }
     else if (i == 0)
         cerr << "file redirection error!\n";
-    int fd = open(cmds[i].cmd[0].c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+    int fd = open(cmds[i].cmd[0].c_str(), O_WRONLY | O_CREAT | O_TRUNC, 644);
     dup2(fd, STDOUT_FILENO);
     close(fd);
     if (execlp("cat", "cat", NULL) == -1)
@@ -186,15 +130,12 @@ void exe_f_red(int stdout_copy, vector<command> &cmds, int i, int temp_fd[])
 
 void exe_num_pipe(int stdout_copy, vector<command> &cmds, int i, bool stop_pipe, int temp_fd[])
 {
-    cout << "xxx" << endl;
     if (stop_pipe)
     {
-        cout << "x222" << endl;
         dup2(temp_fd[0], STDIN_FILENO);
     }
     else
     {
-        cout << "111" << endl;
         dup2(cmds[i - 1].fd[0], STDIN_FILENO);
         close(cmds[i - 1].fd[0]);
     }
@@ -257,32 +198,17 @@ void exe_bin(vector<command> &cmds)
             }
         }
     }
-    // pipe(temp_fd);
-    // for (int i = first_index - 1; i >= 1; i--)
-    // {
-    //     pid_t pid;
-    //     pid = fork();
-    //     if (pid == 0)
-    //     {
-    //         dup2(cmds[i].fd[0], STDIN_FILENO);
-    //         close(cmds[i].fd[0]);
-    //         close(cmds[i].fd[1]);
-    //         dup2(cmds[0].fd[1], STDOUT_FILENO);
-    //         close(cmds[0].fd[1]);
-    //         if (execlp("cat", "cat", NULL) == -1)
-    //         {
-    //             cerr << "file redirection failed!\n";
-    //             exit(EXIT_FAILURE);
-    //         }
-    //     }
-    // }
 
     bool stop_pipe = true;
     int temp_fd[2];
-    pipe(temp_fd);
     for (int i = 0; i < cmds.size(); i++)
     {
         reduce_num_pipes(cmds, i);
+        if (pipe(temp_fd) == -1)
+        {
+            cerr << "pipe error\n";
+            exit(EXIT_FAILURE);
+        }
         for (int j = 0; j < i; j++)
         {
             if (cmds[j].pipe_type == NUM_PIPE || cmds[j].pipe_type == ERR_NUM_PIPE)
@@ -306,6 +232,8 @@ void exe_bin(vector<command> &cmds)
                         dup2(cmds[j].fd[0], STDIN_FILENO);
                         close(cmds[j].fd[0]);
                         close(cmds[j].fd[1]);
+                        // if (j != 2)
+                        //     dup2(temp_fd[1], STDOUT_FILENO);
                         dup2(temp_fd[1], STDOUT_FILENO);
                         close(temp_fd[0]);
                         close(temp_fd[1]);
@@ -320,15 +248,15 @@ void exe_bin(vector<command> &cmds)
                         cmds[j].is_piped = true;
                         close(cmds[j].fd[0]);
                         close(cmds[j].fd[1]);
-                        wait(NULL);
+                        waitpid(pid, &status, 0);
                     }
                 }
             }
         }
-        cout << i << "th pipe" << endl;
-        print_cmds(cmds);
-        cout << endl
-             << endl;
+        // cout << i << "th pipe" << endl;
+        // print_cmds(cmds);
+        // cout << endl
+        //      << endl;
         pid_t pid;
         pid = fork();
         if (pid == -1)
@@ -347,58 +275,53 @@ void exe_bin(vector<command> &cmds)
             for (int j = 0; j < cmds.size(); j++)
             {
                 if (i - 1 != j)
-                {
                     close(cmds[j].fd[0]);
-                }
                 // else
                 //     cout << j << " R" << endl;
                 if (i != j)
-                {
                     close(cmds[j].fd[1]);
-                }
                 // else
                 //     cout << j << " W" << endl;
             }
             // cout << endl;
-            if (cmds[i].pipe_type == NO_PIPE)
+            switch (cmds[i].pipe_type)
             {
+            case NO_PIPE:
                 exe_command(stdout_copy, cmds, i, stop_pipe, temp_fd);
-            }
-            else if (cmds[i].pipe_type == PIPE)
-            {
+                break;
+            case PIPE:
                 exe_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd);
-            }
-            else if (cmds[i].pipe_type == ERR_PIPE)
-            {
+                break;
+            case ERR_PIPE:
                 exe_err_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd);
-            }
-            else if (cmds[i].pipe_type == F_RED_PIPE)
-            {
+                break;
+            case F_RED_PIPE:
                 exe_f_red(stdout_copy, cmds, i, temp_fd);
-            }
-            else if (cmds[i].pipe_type == NUM_PIPE)
-            {
+                break;
+            case NUM_PIPE:
                 if (!cmds[i].is_exe)
                     exe_num_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd);
                 else
                     exit(EXIT_SUCCESS);
-            }
-            else if (cmds[i].pipe_type == ERR_NUM_PIPE)
-            {
+                break;
+            case ERR_NUM_PIPE:
                 if (!cmds[i].is_exe)
                     exe_err_num_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd);
                 else
                     exit(EXIT_SUCCESS);
-            }
-            else
-            {
+                break;
+            default:
                 exit(EXIT_FAILURE);
+                break;
             }
         }
         else
         {
             // parent process
-            // cout << stop_pipe << endl;
+            // if (stop_pipe)
+            //     cout << "stop" << endl;
+            // else
+            //     cout << "pipe" << endl;
             if (cmds[i].pipe_type == NUM_PIPE || cmds[i].pipe_type == ERR_NUM_PIPE)
             {
                 stop_pipe = true;
@@ -409,13 +332,13 @@ void exe_bin(vector<command> &cmds)
                 cmds[i].is_piped = true;
             }
             cmds[i].is_exe = true;
-
-            // close(temp_fd[1]);
-            //  waitpid(pid, &status, 0);
+            close(temp_fd[0]);
+            close(temp_fd[1]);
+            // waitpid(pid, &status, 0);
         }
     }
-    close(temp_fd[0]);
-    close(temp_fd[1]);
+
+    // delete[] temp_fd;
     for (int i = 0; i < cmds.size(); i++)
     {
         switch (cmds[i].pipe_type)
@@ -429,7 +352,7 @@ void exe_bin(vector<command> &cmds)
             break;
         case NUM_PIPE:
         case ERR_NUM_PIPE:
-            if (cmds[i].pipe_num == 0)
+            if (cmds[i].is_piped)
             {
                 close(cmds[i].fd[0]);
                 close(cmds[i].fd[1]);
@@ -445,4 +368,73 @@ void exe_bin(vector<command> &cmds)
         waitpid(0, &status, 0);
     }
     return;
+}
+
+// initialization
+void init_env()
+{
+    setenv("PATH", "bin:.", true);
+}
+
+// build-in command
+void print_env(const char *const para)
+{
+    char *cur_env;
+    cur_env = getenv(para);
+    if (cur_env != NULL)
+        cout << cur_env << endl;
+}
+
+void print_cmds(vector<command> cmds)
+{
+    for (int i = 0; i < cmds.size(); i++)
+    {
+        for (int j = 0; j < cmds[i].cmd.size(); j++)
+        {
+            cout << "{" << cmds[i].cmd[j] << "} ";
+        }
+        cout << cmds[i].which_type();
+        if (cmds[i].pipe_type == NUM_PIPE || cmds[i].pipe_type == ERR_NUM_PIPE)
+            cout << " " << cmds[i].pipe_num;
+        if (cmds[i].is_exe)
+            cout << " exed";
+        if (cmds[i].is_piped)
+            cout << " piped";
+        cout << endl;
+    }
+}
+// functions for execute command
+
+void init_pipe(int *fd)
+{
+    if (pipe(fd) == -1)
+    {
+        cerr << "pipe error\n";
+        exit(EXIT_FAILURE);
+    }
+}
+// execute command
+
+// debug
+
+// command class member function
+string command::which_type()
+{
+    switch (pipe_type)
+    {
+    case NO_PIPE:
+        return "NO_PIPE";
+    case PIPE:
+        return "PIPE";
+    case ERR_PIPE:
+        return "ERR_PIP";
+    case F_RED_PIPE:
+        return "F_RED_PIPE";
+    case NUM_PIPE:
+        return "NUM_PIPE";
+    case ERR_NUM_PIPE:
+        return "ERR_NUM_PIPE";
+    default:
+        return "error";
+    }
 }
