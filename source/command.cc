@@ -27,7 +27,11 @@ void exe_command(int stdout_copy, vector<command> &cmds, int i, bool stop_pipe, 
 {
     if (stop_pipe)
     {
+        // cout << i << "th catch form np stdin" << endl;
+        // cout << temp_fd << endl;
         dup2(temp_fd[0], STDIN_FILENO);
+        // if (dup2(temp_fd[0], STDIN_FILENO) == -1)
+        //     perror("dup2");
     }
     else
     {
@@ -198,23 +202,42 @@ void exe_bin(vector<command> &cmds)
             }
         }
     }
-
-    bool stop_pipe = true;
-    int temp_fd[2];
-    for (int i = 0; i < cmds.size(); i++)
+    vector<int *> temp_fd_arr;
+    /*only support 10 number pipe*/
+    for (int i = 0; i < 10; i++)
     {
-        reduce_num_pipes(cmds, i);
+        int *temp_fd = new int[2];
         if (pipe(temp_fd) == -1)
         {
             cerr << "pipe error\n";
             exit(EXIT_FAILURE);
         }
+        temp_fd_arr.push_back(temp_fd);
+    }
+
+    bool stop_pipe = true;
+    pid_t last_pid = -1;
+    int temp_id = 0;
+    for (int i = 0; i < cmds.size(); i++)
+    {
+        reduce_num_pipes(cmds, i);
+        // int *temp_fd = new int[2];
+        // cout << i << " th " << temp_fd << endl;
+        // if (pipe(temp_fd) == -1)
+        // {
+        //     cerr << "pipe error\n";
+        //     exit(EXIT_FAILURE);
+        // }
+        bool is_new_temp = true;
         for (int j = 0; j < i; j++)
         {
             if (cmds[j].pipe_type == NUM_PIPE || cmds[j].pipe_type == ERR_NUM_PIPE)
             {
                 if (!cmds[j].is_piped && cmds[j].pipe_num == 0)
                 {
+                    if (is_new_temp)
+                        temp_id++;
+                    is_new_temp = false;
                     pid_t pid;
                     pid = fork();
                     if (pid == -1)
@@ -229,14 +252,16 @@ void exe_bin(vector<command> &cmds)
                     }
                     else if (pid == 0)
                     {
+                        // cout << i << "th collecting from " << j << endl;
                         dup2(cmds[j].fd[0], STDIN_FILENO);
                         close(cmds[j].fd[0]);
                         close(cmds[j].fd[1]);
-                        // if (j != 2)
-                        //     dup2(temp_fd[1], STDOUT_FILENO);
-                        dup2(temp_fd[1], STDOUT_FILENO);
-                        close(temp_fd[0]);
-                        close(temp_fd[1]);
+                        // dup2(temp_fd[1], STDOUT_FILENO);
+                        // close(temp_fd[0]);
+                        // close(temp_fd[1]);
+                        dup2(temp_fd_arr[temp_id][1], STDOUT_FILENO);
+                        close(temp_fd_arr[temp_id][0]);
+                        close(temp_fd_arr[temp_id][1]);
                         if (execlp("cat", "cat", NULL) == -1)
                         {
                             cerr << "cat error\n";
@@ -248,11 +273,16 @@ void exe_bin(vector<command> &cmds)
                         cmds[j].is_piped = true;
                         close(cmds[j].fd[0]);
                         close(cmds[j].fd[1]);
-                        waitpid(pid, &status, 0);
+                        // last_pid = pid;
                     }
                 }
             }
         }
+        // cout << "temp_read: " << temp_fd[0] << endl;
+        // cout << "temp_read: " << temp_fd[1] << endl;
+        // if (last_pid != -1)
+        //     waitpid(last_pid, &status, 0);
+        // last_pid = -1;
         // cout << i << "th pipe" << endl;
         // print_cmds(cmds);
         // cout << endl
@@ -287,26 +317,26 @@ void exe_bin(vector<command> &cmds)
             switch (cmds[i].pipe_type)
             {
             case NO_PIPE:
-                exe_command(stdout_copy, cmds, i, stop_pipe, temp_fd);
+                exe_command(stdout_copy, cmds, i, stop_pipe, temp_fd_arr[temp_id]);
                 break;
             case PIPE:
-                exe_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd);
+                exe_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd_arr[temp_id]);
                 break;
             case ERR_PIPE:
-                exe_err_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd);
+                exe_err_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd_arr[temp_id]);
                 break;
             case F_RED_PIPE:
-                exe_f_red(stdout_copy, cmds, i, temp_fd);
+                exe_f_red(stdout_copy, cmds, i, temp_fd_arr[temp_id]);
                 break;
             case NUM_PIPE:
                 if (!cmds[i].is_exe)
-                    exe_num_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd);
+                    exe_num_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd_arr[temp_id]);
                 else
                     exit(EXIT_SUCCESS);
                 break;
             case ERR_NUM_PIPE:
                 if (!cmds[i].is_exe)
-                    exe_err_num_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd);
+                    exe_err_num_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd_arr[temp_id]);
                 else
                     exit(EXIT_SUCCESS);
                 break;
@@ -322,6 +352,8 @@ void exe_bin(vector<command> &cmds)
             //     cout << "stop" << endl;
             // else
             //     cout << "pipe" << endl;
+            if (cmds[i].pipe_type == NO_PIPE || cmds[i].pipe_type == F_RED_PIPE)
+                last_pid = pid;
             if (cmds[i].pipe_type == NUM_PIPE || cmds[i].pipe_type == ERR_NUM_PIPE)
             {
                 stop_pipe = true;
@@ -332,13 +364,13 @@ void exe_bin(vector<command> &cmds)
                 cmds[i].is_piped = true;
             }
             cmds[i].is_exe = true;
-            close(temp_fd[0]);
-            close(temp_fd[1]);
+            close(temp_fd_arr[temp_id][0]);
+            close(temp_fd_arr[temp_id][1]);
             // waitpid(pid, &status, 0);
+            // delete[] temp_fd;
         }
     }
 
-    // delete[] temp_fd;
     for (int i = 0; i < cmds.size(); i++)
     {
         switch (cmds[i].pipe_type)
@@ -363,10 +395,18 @@ void exe_bin(vector<command> &cmds)
         }
     }
 
-    for (int i = 0; i < cmds.size(); i++)
+    for (int i = 0; i < 10; i++)
     {
-        waitpid(0, &status, 0);
+        close(temp_fd_arr[i][0]);
+        close(temp_fd_arr[i][1]);
     }
+
+    if (last_pid != -1)
+        waitpid(last_pid, &status, 0);
+    // for (int i = 0; i < cmds.size(); i++)
+    // {
+    //     waitpid(0, &status, 0);
+    // }
     return;
 }
 
