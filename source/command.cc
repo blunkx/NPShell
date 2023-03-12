@@ -17,7 +17,15 @@ char **vector_to_c_str_arr(vector<string> cmd)
     for (int i = 0; i < cmd.size(); i++)
     {
         // arr[i] = (i == cmd.size() - 1) ? strdup((cmd[i]).c_str()) : NULL;
-        arr[i] = strdup((cmd[i]).c_str());
+        // arr[i] = strdup((cmd[i]).c_str());
+        size_t slen = strlen((cmd[i]).c_str());
+        char *temp = (char *)malloc(slen + 1);
+        if (temp == NULL)
+        {
+            return NULL;
+        }
+        memcpy(temp, (cmd[i]).c_str(), slen + 1);
+        arr[i] = temp;
     }
     arr[cmd.size()] = NULL;
     return arr;
@@ -47,7 +55,7 @@ void exe_command(int stdout_copy, vector<command> &cmds, int i, bool stop_pipe, 
     if (execvp(args[0], args) == -1)
     {
         // perror("Error: ");
-        cerr << "Unknown command: {" << args[0] << "}.\n";
+        cerr << "Unknown command: [" << args[0] << "].\n";
         exit(EXIT_FAILURE);
     }
 }
@@ -75,7 +83,7 @@ void exe_pipe(int stdout_copy, vector<command> &cmds, int i, bool stop_pipe, int
     if (execvp(args[0], args) == -1)
     {
         // perror("Error: ");
-        cerr << "Unknown command: {" << args[0] << "}.\n";
+        cerr << "Unknown command: [" << args[0] << "].\n";
         exit(EXIT_FAILURE);
     }
 }
@@ -104,7 +112,7 @@ void exe_err_pipe(int stdout_copy, vector<command> &cmds, int i, bool stop_pipe,
     if (execvp(args[0], args) == -1)
     {
         // perror("Error: ");
-        cerr << "Unknown command: {" << args[0] << "}.\n";
+        cerr << "Unknown command: [" << args[0] << "].\n";
         exit(EXIT_FAILURE);
     }
 }
@@ -151,7 +159,7 @@ void exe_num_pipe(int stdout_copy, vector<command> &cmds, int i, bool stop_pipe,
     if (execvp(args[0], args) == -1)
     {
         // perror("Error: ");
-        cerr << "Unknown command: {" << args[0] << "}.\n";
+        cerr << "Unknown command: [" << args[0] << "].\n";
         exit(EXIT_FAILURE);
     }
 }
@@ -180,7 +188,7 @@ void exe_err_num_pipe(int stdout_copy, vector<command> &cmds, int i, bool stop_p
     if (execvp(args[0], args) == -1)
     {
         // perror("Error: ");
-        cerr << "Unknown command: {" << args[0] << "}.\n";
+        cerr << "Unknown command: [" << args[0] << "].\n";
         exit(EXIT_FAILURE);
     }
 }
@@ -220,7 +228,8 @@ void exe_bin(vector<command> &cmds)
     int temp_id = 0;
     for (int i = 0; i < cmds.size(); i++)
     {
-        reduce_num_pipes(cmds, i);
+        if (cmds[i].pipe_type != F_RED_PIPE)
+            reduce_num_pipes(cmds, i);
         // int *temp_fd = new int[2];
         // cout << i << " th " << temp_fd << endl;
         // if (pipe(temp_fd) == -1)
