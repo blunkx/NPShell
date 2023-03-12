@@ -29,9 +29,9 @@ void exe_command(int stdout_copy, vector<command> &cmds, int i, bool stop_pipe, 
     {
         // cout << i << "th catch form np stdin" << endl;
         // cout << temp_fd << endl;
-        dup2(temp_fd[0], STDIN_FILENO);
-        // if (dup2(temp_fd[0], STDIN_FILENO) == -1)
-        //     perror("dup2");
+        // dup2(temp_fd[0], STDIN_FILENO);
+        if (dup2(temp_fd[0], STDIN_FILENO) == -1)
+            perror("dup2");
     }
     else
     {
@@ -364,8 +364,12 @@ void exe_bin(vector<command> &cmds)
                 cmds[i].is_piped = true;
             }
             cmds[i].is_exe = true;
-            close(temp_fd_arr[temp_id][0]);
-            close(temp_fd_arr[temp_id][1]);
+            if (temp_id != 0)
+            {
+                close(temp_fd_arr[temp_id][0]);
+                close(temp_fd_arr[temp_id][1]);
+            }
+
             // waitpid(pid, &status, 0);
             // delete[] temp_fd;
         }
