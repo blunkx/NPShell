@@ -106,12 +106,4 @@ void parser(string &input, vector<command> &cmds)
         exit(0);
         break;
     }
-
-    cmds.erase(
-        remove_if(
-            cmds.begin(),
-            cmds.end(),
-            [](command const &p)
-            { return p.is_piped; }),
-        cmds.end());
 }
