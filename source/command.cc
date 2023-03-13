@@ -198,18 +198,17 @@ void exe_bin(vector<command> &cmds)
     int status;
     // int stdin_copy = dup(STDIN_FILENO);
     int stdout_copy = dup(STDOUT_FILENO);
-    string temp_output;
-    for (int i = 0; i < cmds.size(); i++)
-    {
-        if (!cmds[i].is_exe)
-        {
-            if (pipe(cmds[i].fd) == -1)
-            {
-                cerr << "pipe error\n";
-                exit(EXIT_FAILURE);
-            }
-        }
-    }
+    // for (int i = 0; i < cmds.size(); i++)
+    // {
+    //     if (!cmds[i].is_exe)
+    //     {
+    //         if (pipe(cmds[i].fd) == -1)
+    //         {
+    //             cerr << "pipe error\n";
+    //             exit(EXIT_FAILURE);
+    //         }
+    //     }
+    // }
     vector<int *> temp_fd_arr;
     /*only support 10 number pipe*/
     for (int i = 0; i < 10; i++)
@@ -228,15 +227,16 @@ void exe_bin(vector<command> &cmds)
     int temp_id = 0;
     for (int i = 0; i < cmds.size(); i++)
     {
+        if (!cmds[i].is_exe)
+        {
+            if (pipe(cmds[i].fd) == -1)
+            {
+                cerr << "pipe error\n";
+                exit(EXIT_FAILURE);
+            }
+        }
         if (cmds[i].pipe_type != F_RED_PIPE)
             reduce_num_pipes(cmds, i);
-        // int *temp_fd = new int[2];
-        // cout << i << " th " << temp_fd << endl;
-        // if (pipe(temp_fd) == -1)
-        // {
-        //     cerr << "pipe error\n";
-        //     exit(EXIT_FAILURE);
-        // }
         bool is_new_temp = true;
         for (int j = 0; j < i; j++)
         {
@@ -252,12 +252,13 @@ void exe_bin(vector<command> &cmds)
                     if (pid == -1)
                     {
                         cerr << "fork error!\n";
-                        while (true)
-                        {
-                            if (waitpid(pid, &status, WNOHANG) == pid)
-                                break;
-                        }
-                        pid = fork();
+                        exit(EXIT_FAILURE);
+                        // while (true)
+                        // {
+                        //     if (waitpid(pid, &status, WNOHANG) == pid)
+                        //         break;
+                        // }
+                        // pid = fork();
                     }
                     else if (pid == 0)
                     {
@@ -265,9 +266,6 @@ void exe_bin(vector<command> &cmds)
                         dup2(cmds[j].fd[0], STDIN_FILENO);
                         close(cmds[j].fd[0]);
                         close(cmds[j].fd[1]);
-                        // dup2(temp_fd[1], STDOUT_FILENO);
-                        // close(temp_fd[0]);
-                        // close(temp_fd[1]);
                         dup2(temp_fd_arr[temp_id][1], STDOUT_FILENO);
                         close(temp_fd_arr[temp_id][0]);
                         close(temp_fd_arr[temp_id][1]);
@@ -282,7 +280,6 @@ void exe_bin(vector<command> &cmds)
                         cmds[j].is_piped = true;
                         close(cmds[j].fd[0]);
                         close(cmds[j].fd[1]);
-                        // last_pid = pid;
                     }
                 }
             }
@@ -378,9 +375,7 @@ void exe_bin(vector<command> &cmds)
                 close(temp_fd_arr[temp_id][0]);
                 close(temp_fd_arr[temp_id][1]);
             }
-
             // waitpid(pid, &status, 0);
-            // delete[] temp_fd;
         }
     }
 
