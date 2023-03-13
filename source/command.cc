@@ -130,7 +130,7 @@ void exe_f_red(int stdout_copy, vector<command> &cmds, int i, int temp_fd[])
     }
     else if (i == 0)
         cerr << "file redirection error!\n";
-    int fd = open(cmds[i].cmd[0].c_str(), O_WRONLY | O_CREAT | O_TRUNC, 644);
+    int fd = open(cmds[i].cmd[0].c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0775);
     dup2(fd, STDOUT_FILENO);
     close(fd);
     if (execlp("cat", "cat", NULL) == -1)
@@ -195,6 +195,7 @@ void exe_err_num_pipe(int stdout_copy, vector<command> &cmds, int i, bool stop_p
 
 void exe_bin(vector<command> &cmds)
 {
+    bool debug_output = false;
     int status;
     // int stdin_copy = dup(STDIN_FILENO);
     int stdout_copy = dup(STDOUT_FILENO);
@@ -289,21 +290,26 @@ void exe_bin(vector<command> &cmds)
         // if (last_pid != -1)
         //     waitpid(last_pid, &status, 0);
         // last_pid = -1;
-        // cout << i << "th pipe" << endl;
-        // print_cmds(cmds);
-        // cout << endl
-        //      << endl;
+        if (debug_output)
+        {
+            cout << i << "th pipe" << endl;
+            print_cmds(cmds);
+            cout << endl
+                 << endl;
+        }
+
         pid_t pid;
         pid = fork();
         if (pid == -1)
         {
             cerr << "fork error!\n";
-            while (true)
-            {
-                if (waitpid(pid, &status, WNOHANG) == pid)
-                    break;
-            }
-            pid = fork();
+            exit(EXIT_FAILURE);
+            // while (true)
+            // {
+            //     if (waitpid(pid, &status, WNOHANG) == pid)
+            //         break;
+            // }
+            // pid = fork();
         }
         else if (pid == 0)
         {
@@ -408,9 +414,17 @@ void exe_bin(vector<command> &cmds)
         close(temp_fd_arr[i][0]);
         close(temp_fd_arr[i][1]);
     }
-
     if (last_pid != -1)
         waitpid(last_pid, &status, 0);
+    if (debug_output)
+        cout << "===" << endl;
+    cmds.erase(
+        remove_if(
+            cmds.begin(),
+            cmds.end(),
+            [](command const &p)
+            { return p.is_piped; }),
+        cmds.end());
     // for (size_t i = 0; i < cmds.size(); i++)
     // {
     //     waitpid(0, &status, 0);
