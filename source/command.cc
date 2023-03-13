@@ -14,7 +14,7 @@ inline void reduce_num_pipes(vector<command> &number_pipes, int last)
 char **vector_to_c_str_arr(vector<string> cmd)
 {
     char **arr = (char **)malloc((cmd.size() + 1) * sizeof(char *));
-    for (int i = 0; i < cmd.size(); i++)
+    for (size_t i = 0; i < cmd.size(); i++)
     {
         // arr[i] = (i == cmd.size() - 1) ? strdup((cmd[i]).c_str()) : NULL;
         // arr[i] = strdup((cmd[i]).c_str());
@@ -225,7 +225,7 @@ void exe_bin(vector<command> &cmds)
     bool stop_pipe = true;
     pid_t last_pid = -1;
     int temp_id = 0;
-    for (int i = 0; i < cmds.size(); i++)
+    for (size_t i = 0; i < cmds.size(); i++)
     {
         if (!cmds[i].is_exe)
         {
@@ -238,7 +238,7 @@ void exe_bin(vector<command> &cmds)
         if (cmds[i].pipe_type != F_RED_PIPE)
             reduce_num_pipes(cmds, i);
         bool is_new_temp = true;
-        for (int j = 0; j < i; j++)
+        for (size_t j = 0; j < i; j++)
         {
             if (cmds[j].pipe_type == NUM_PIPE || cmds[j].pipe_type == ERR_NUM_PIPE)
             {
@@ -308,7 +308,7 @@ void exe_bin(vector<command> &cmds)
         else if (pid == 0)
         {
             //  child process
-            for (int j = 0; j < cmds.size(); j++)
+            for (size_t j = 0; j < cmds.size(); j++)
             {
                 if (i - 1 != j)
                     close(cmds[j].fd[0]);
@@ -379,7 +379,7 @@ void exe_bin(vector<command> &cmds)
         }
     }
 
-    for (int i = 0; i < cmds.size(); i++)
+    for (size_t i = 0; i < cmds.size(); i++)
     {
         switch (cmds[i].pipe_type)
         {
@@ -411,7 +411,7 @@ void exe_bin(vector<command> &cmds)
 
     if (last_pid != -1)
         waitpid(last_pid, &status, 0);
-    // for (int i = 0; i < cmds.size(); i++)
+    // for (size_t i = 0; i < cmds.size(); i++)
     // {
     //     waitpid(0, &status, 0);
     // }
@@ -435,9 +435,9 @@ void print_env(const char *const para)
 
 void print_cmds(vector<command> cmds)
 {
-    for (int i = 0; i < cmds.size(); i++)
+    for (size_t i = 0; i < cmds.size(); i++)
     {
-        for (int j = 0; j < cmds[i].cmd.size(); j++)
+        for (size_t j = 0; j < cmds[i].cmd.size(); j++)
         {
             cout << "{" << cmds[i].cmd[j] << "} ";
         }
