@@ -50,6 +50,7 @@ inline void init_pipe(int *fd);
 inline void reduce_num_pipes(vector<command> &number_pipes, int last);
 inline void init_temp_fd(vector<int *> &temp_fd_arr, size_t s);
 void collect_num_pipe_output(vector<command> &cmds, vector<int *> &temp_fd_arr, size_t &temp_id, size_t i);
+inline void close_unused_pipe_in_child(vector<command> &cmds, size_t i);
 inline void close_pipe(vector<command> &cmds);
 inline void close_temp_pipe(vector<int *> &temp_fd_arr);
 inline void reduce_num_by_nl(vector<command> &cmds);
