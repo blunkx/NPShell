@@ -1,13 +1,274 @@
 #include "command.h"
 
+void exe_bin(vector<command> &cmds)
+{
+    bool debug_output = false;
+    int status;
+    // int stdin_copy = dup(STDIN_FILENO);
+    int stdout_copy = dup(STDOUT_FILENO);
+    vector<int *> temp_fd_arr;
+    init_temp_fd(temp_fd_arr, 5); /*only support 10 number pipe*/
+    bool stop_pipe = true;
+    pid_t last_pid = -1;
+    size_t temp_id = 0;
+    for (size_t i = 0; i < cmds.size(); i++)
+    {
+        if (!cmds[i].is_exe)
+        {
+            init_pipe(cmds[i].fd);
+            collect_num_pipe_output(cmds, temp_fd_arr, temp_id, i);
+        }
+        if ((cmds[i].pipe_type == NUM_PIPE || cmds[i].pipe_type == ERR_NUM_PIPE))
+            reduce_num_pipes(cmds, i);
+
+        if (debug_output)
+        {
+            cout << "temp_read: " << temp_fd_arr[temp_id][0] << endl;
+            cout << "temp_write: " << temp_fd_arr[temp_id][1] << endl;
+            cout << i << "th pipe" << endl;
+            print_cmds(cmds);
+            cout << endl
+                 << endl;
+        }
+        pid_t pid;
+        pid = fork();
+        if (pid == -1)
+        {
+            cerr << "fork error!\n";
+            exit(EXIT_FAILURE);
+        }
+        else if (pid == 0)
+        {
+            //  child process
+            for (size_t j = 0; j < cmds.size(); j++)
+            {
+                if (i - 1 != j)
+                    close(cmds[j].fd[0]);
+                if (i != j)
+                    close(cmds[j].fd[1]);
+            }
+            switch (cmds[i].pipe_type)
+            {
+            case NO_PIPE:
+                exe_command(stdout_copy, cmds, i, stop_pipe, temp_fd_arr[temp_id]);
+                break;
+            case PIPE:
+                exe_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd_arr[temp_id]);
+                break;
+            case ERR_PIPE:
+                exe_err_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd_arr[temp_id]);
+                break;
+            case F_RED_PIPE:
+                exe_f_red(stdout_copy, cmds, i, temp_fd_arr[temp_id]);
+                break;
+            case NUM_PIPE:
+                if (!cmds[i].is_exe)
+                    exe_num_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd_arr[temp_id]);
+                else
+                    exit(EXIT_SUCCESS);
+                break;
+            case ERR_NUM_PIPE:
+                if (!cmds[i].is_exe)
+                    exe_err_num_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd_arr[temp_id]);
+                else
+                    exit(EXIT_SUCCESS);
+                break;
+            default:
+                exit(EXIT_FAILURE);
+                break;
+            }
+        }
+        else
+        {
+            // parent process
+            if (cmds[i].pipe_type == NO_PIPE || cmds[i].pipe_type == F_RED_PIPE)
+                last_pid = pid;
+            if (cmds[i].pipe_type == NUM_PIPE || cmds[i].pipe_type == ERR_NUM_PIPE)
+            {
+                stop_pipe = true;
+            }
+            else
+            {
+                stop_pipe = false;
+                cmds[i].is_piped = true;
+            }
+            cmds[i].is_exe = true;
+            if (temp_id != 0)
+            {
+                close(temp_fd_arr[temp_id][0]);
+                close(temp_fd_arr[temp_id][1]);
+            }
+            // waitpid(pid, &status, 0);
+        }
+    }
+    close_pipe(cmds);
+    close_temp_pipe(temp_fd_arr);
+    if (last_pid != -1)
+        waitpid(last_pid, &status, 0);
+
+    reduce_num_by_nl(cmds);
+    cmds.erase(
+        remove_if(
+            cmds.begin(),
+            cmds.end(),
+            [](command const &p)
+            { return p.is_piped; }),
+        cmds.end());
+    if (debug_output)
+        cout << "==========================" << endl;
+    return;
+}
+
+// initialization
+void init_env()
+{
+    setenv("PATH", "bin:.", true);
+}
+
+// build-in command
+void print_env(const char *const para)
+{
+    char *cur_env;
+    cur_env = getenv(para);
+    if (cur_env != NULL)
+        cout << cur_env << endl;
+}
+
+// functions for execute command
+inline void init_pipe(int *fd)
+{
+    if (pipe(fd) == -1)
+    {
+        cerr << "pipe error\n";
+        exit(EXIT_FAILURE);
+    }
+}
+
 inline void reduce_num_pipes(vector<command> &number_pipes, int last)
 {
     if (number_pipes[last].is_exe)
         return;
-    for (int i = 0; i < last; i++)
+    for (int i = 0; i <= last; i++)
     {
         if (number_pipes[i].pipe_num > 0)
             number_pipes[i].pipe_num--;
+    }
+}
+
+inline void init_temp_fd(vector<int *> &temp_fd_arr, size_t s)
+{
+    for (size_t i = 0; i < s; i++)
+    {
+        int *temp_fd = new int[2];
+        if (pipe(temp_fd) == -1)
+        {
+            cerr << "pipe error\n";
+            exit(EXIT_FAILURE);
+        }
+        temp_fd_arr.push_back(temp_fd);
+    }
+}
+
+void collect_num_pipe_output(vector<command> &cmds, vector<int *> &temp_fd_arr, size_t &temp_id, size_t i)
+{
+    bool is_new_temp = true;
+    for (size_t j = 0; j < i; j++)
+    {
+        if (cmds[j].pipe_type == NUM_PIPE || cmds[j].pipe_type == ERR_NUM_PIPE)
+        {
+            if (!cmds[j].is_piped && cmds[j].pipe_num == 0)
+            {
+                if (is_new_temp)
+                    temp_id++;
+                is_new_temp = false;
+                pid_t pid;
+                pid = fork();
+                if (pid == -1)
+                {
+                    cerr << "fork error!\n";
+                    exit(EXIT_FAILURE);
+                }
+                else if (pid == 0)
+                {
+                    // if (debug_output)
+                    //     cout << i << "th collecting from " << j << endl;
+                    dup2(cmds[j].fd[0], STDIN_FILENO);
+                    close(cmds[j].fd[0]);
+                    close(cmds[j].fd[1]);
+                    dup2(temp_fd_arr[temp_id][1], STDOUT_FILENO);
+                    close(temp_fd_arr[temp_id][0]);
+                    close(temp_fd_arr[temp_id][1]);
+                    if (execlp("cat", "cat", NULL) == -1)
+                    {
+                        cerr << "cat error\n";
+                        exit(EXIT_FAILURE);
+                    }
+                }
+                else
+                {
+                    cmds[j].is_piped = true;
+                    close(cmds[j].fd[0]);
+                    close(cmds[j].fd[1]);
+                }
+            }
+        }
+    }
+}
+inline void close_pipe(vector<command> &cmds)
+{
+    for (size_t i = 0; i < cmds.size(); i++)
+    {
+        switch (cmds[i].pipe_type)
+        {
+        case NO_PIPE:
+        case PIPE:
+        case ERR_PIPE:
+        case F_RED_PIPE:
+            close(cmds[i].fd[0]);
+            close(cmds[i].fd[1]);
+            break;
+        case NUM_PIPE:
+        case ERR_NUM_PIPE:
+            if (cmds[i].is_piped)
+            {
+                close(cmds[i].fd[0]);
+                close(cmds[i].fd[1]);
+            }
+            break;
+        default:
+            break;
+        }
+    }
+}
+inline void close_temp_pipe(vector<int *> &temp_fd_arr)
+{
+    for (size_t i = 0; i < temp_fd_arr.size(); i++)
+    {
+        close(temp_fd_arr[i][0]);
+        close(temp_fd_arr[i][1]);
+        free(temp_fd_arr[i]);
+    }
+}
+
+inline void reduce_num_by_nl(vector<command> &cmds)
+{
+    switch (cmds.back().pipe_type)
+    {
+    case NO_PIPE:
+    case PIPE:
+    case ERR_PIPE:
+    case F_RED_PIPE:
+        for (size_t i = 0; i < cmds.size(); i++)
+        {
+            if (cmds[i].pipe_num > 0)
+                cmds[i].pipe_num--;
+        }
+        break;
+    case NUM_PIPE:
+    case ERR_NUM_PIPE:
+        break;
+    default:
+        break;
     }
 }
 
@@ -16,7 +277,6 @@ char **vector_to_c_str_arr(vector<string> cmd)
     char **arr = (char **)malloc((cmd.size() + 1) * sizeof(char *));
     for (size_t i = 0; i < cmd.size(); i++)
     {
-        // arr[i] = (i == cmd.size() - 1) ? strdup((cmd[i]).c_str()) : NULL;
         // arr[i] = strdup((cmd[i]).c_str());
         size_t slen = strlen((cmd[i]).c_str());
         char *temp = (char *)malloc(slen + 1);
@@ -31,6 +291,7 @@ char **vector_to_c_str_arr(vector<string> cmd)
     return arr;
 }
 
+// execute command
 void exe_command(int stdout_copy, vector<command> &cmds, int i, bool stop_pipe, int temp_fd[])
 {
     if (stop_pipe)
@@ -193,260 +454,7 @@ void exe_err_num_pipe(int stdout_copy, vector<command> &cmds, int i, bool stop_p
     }
 }
 
-void exe_bin(vector<command> &cmds)
-{
-    bool debug_output = false;
-    int status;
-    // int stdin_copy = dup(STDIN_FILENO);
-    int stdout_copy = dup(STDOUT_FILENO);
-    // for (int i = 0; i < cmds.size(); i++)
-    // {
-    //     if (!cmds[i].is_exe)
-    //     {
-    //         if (pipe(cmds[i].fd) == -1)
-    //         {
-    //             cerr << "pipe error\n";
-    //             exit(EXIT_FAILURE);
-    //         }
-    //     }
-    // }
-    vector<int *> temp_fd_arr;
-    /*only support 10 number pipe*/
-    for (int i = 0; i < 10; i++)
-    {
-        int *temp_fd = new int[2];
-        if (pipe(temp_fd) == -1)
-        {
-            cerr << "pipe error\n";
-            exit(EXIT_FAILURE);
-        }
-        temp_fd_arr.push_back(temp_fd);
-    }
-
-    bool stop_pipe = true;
-    pid_t last_pid = -1;
-    int temp_id = 0;
-    for (size_t i = 0; i < cmds.size(); i++)
-    {
-        if (!cmds[i].is_exe)
-        {
-            if (pipe(cmds[i].fd) == -1)
-            {
-                cerr << "pipe error\n";
-                exit(EXIT_FAILURE);
-            }
-        }
-        if (cmds[i].pipe_type != F_RED_PIPE)
-            reduce_num_pipes(cmds, i);
-        bool is_new_temp = true;
-        for (size_t j = 0; j < i; j++)
-        {
-            if (cmds[j].pipe_type == NUM_PIPE || cmds[j].pipe_type == ERR_NUM_PIPE)
-            {
-                if (!cmds[j].is_piped && cmds[j].pipe_num == 0)
-                {
-                    if (is_new_temp)
-                        temp_id++;
-                    is_new_temp = false;
-                    pid_t pid;
-                    pid = fork();
-                    if (pid == -1)
-                    {
-                        cerr << "fork error!\n";
-                        exit(EXIT_FAILURE);
-                        // while (true)
-                        // {
-                        //     if (waitpid(pid, &status, WNOHANG) == pid)
-                        //         break;
-                        // }
-                        // pid = fork();
-                    }
-                    else if (pid == 0)
-                    {
-                        // cout << i << "th collecting from " << j << endl;
-                        dup2(cmds[j].fd[0], STDIN_FILENO);
-                        close(cmds[j].fd[0]);
-                        close(cmds[j].fd[1]);
-                        dup2(temp_fd_arr[temp_id][1], STDOUT_FILENO);
-                        close(temp_fd_arr[temp_id][0]);
-                        close(temp_fd_arr[temp_id][1]);
-                        if (execlp("cat", "cat", NULL) == -1)
-                        {
-                            cerr << "cat error\n";
-                            exit(EXIT_FAILURE);
-                        }
-                    }
-                    else
-                    {
-                        cmds[j].is_piped = true;
-                        close(cmds[j].fd[0]);
-                        close(cmds[j].fd[1]);
-                    }
-                }
-            }
-        }
-        // cout << "temp_read: " << temp_fd[0] << endl;
-        // cout << "temp_read: " << temp_fd[1] << endl;
-        // if (last_pid != -1)
-        //     waitpid(last_pid, &status, 0);
-        // last_pid = -1;
-        if (debug_output)
-        {
-            cout << i << "th pipe" << endl;
-            print_cmds(cmds);
-            cout << endl
-                 << endl;
-        }
-
-        pid_t pid;
-        pid = fork();
-        if (pid == -1)
-        {
-            cerr << "fork error!\n";
-            exit(EXIT_FAILURE);
-            // while (true)
-            // {
-            //     if (waitpid(pid, &status, WNOHANG) == pid)
-            //         break;
-            // }
-            // pid = fork();
-        }
-        else if (pid == 0)
-        {
-            //  child process
-            for (size_t j = 0; j < cmds.size(); j++)
-            {
-                if (i - 1 != j)
-                    close(cmds[j].fd[0]);
-                // else
-                //     cout << j << " R" << endl;
-                if (i != j)
-                    close(cmds[j].fd[1]);
-                // else
-                //     cout << j << " W" << endl;
-            }
-            // cout << endl;
-            switch (cmds[i].pipe_type)
-            {
-            case NO_PIPE:
-                exe_command(stdout_copy, cmds, i, stop_pipe, temp_fd_arr[temp_id]);
-                break;
-            case PIPE:
-                exe_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd_arr[temp_id]);
-                break;
-            case ERR_PIPE:
-                exe_err_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd_arr[temp_id]);
-                break;
-            case F_RED_PIPE:
-                exe_f_red(stdout_copy, cmds, i, temp_fd_arr[temp_id]);
-                break;
-            case NUM_PIPE:
-                if (!cmds[i].is_exe)
-                    exe_num_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd_arr[temp_id]);
-                else
-                    exit(EXIT_SUCCESS);
-                break;
-            case ERR_NUM_PIPE:
-                if (!cmds[i].is_exe)
-                    exe_err_num_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd_arr[temp_id]);
-                else
-                    exit(EXIT_SUCCESS);
-                break;
-            default:
-                exit(EXIT_FAILURE);
-                break;
-            }
-        }
-        else
-        {
-            // parent process
-            // if (stop_pipe)
-            //     cout << "stop" << endl;
-            // else
-            //     cout << "pipe" << endl;
-            if (cmds[i].pipe_type == NO_PIPE || cmds[i].pipe_type == F_RED_PIPE)
-                last_pid = pid;
-            if (cmds[i].pipe_type == NUM_PIPE || cmds[i].pipe_type == ERR_NUM_PIPE)
-            {
-                stop_pipe = true;
-            }
-            else
-            {
-                stop_pipe = false;
-                cmds[i].is_piped = true;
-            }
-            cmds[i].is_exe = true;
-            if (temp_id != 0)
-            {
-                close(temp_fd_arr[temp_id][0]);
-                close(temp_fd_arr[temp_id][1]);
-            }
-            // waitpid(pid, &status, 0);
-        }
-    }
-
-    for (size_t i = 0; i < cmds.size(); i++)
-    {
-        switch (cmds[i].pipe_type)
-        {
-        case NO_PIPE:
-        case PIPE:
-        case ERR_PIPE:
-        case F_RED_PIPE:
-            close(cmds[i].fd[0]);
-            close(cmds[i].fd[1]);
-            break;
-        case NUM_PIPE:
-        case ERR_NUM_PIPE:
-            if (cmds[i].is_piped)
-            {
-                close(cmds[i].fd[0]);
-                close(cmds[i].fd[1]);
-            }
-            break;
-        default:
-            break;
-        }
-    }
-
-    for (int i = 0; i < 10; i++)
-    {
-        close(temp_fd_arr[i][0]);
-        close(temp_fd_arr[i][1]);
-    }
-    if (last_pid != -1)
-        waitpid(last_pid, &status, 0);
-    if (debug_output)
-        cout << "===" << endl;
-    cmds.erase(
-        remove_if(
-            cmds.begin(),
-            cmds.end(),
-            [](command const &p)
-            { return p.is_piped; }),
-        cmds.end());
-    // for (size_t i = 0; i < cmds.size(); i++)
-    // {
-    //     waitpid(0, &status, 0);
-    // }
-    return;
-}
-
-// initialization
-void init_env()
-{
-    setenv("PATH", "bin:.", true);
-}
-
-// build-in command
-void print_env(const char *const para)
-{
-    char *cur_env;
-    cur_env = getenv(para);
-    if (cur_env != NULL)
-        cout << cur_env << endl;
-}
-
+// debug
 void print_cmds(vector<command> cmds)
 {
     for (size_t i = 0; i < cmds.size(); i++)
@@ -465,19 +473,6 @@ void print_cmds(vector<command> cmds)
         cout << endl;
     }
 }
-// functions for execute command
-
-void init_pipe(int *fd)
-{
-    if (pipe(fd) == -1)
-    {
-        cerr << "pipe error\n";
-        exit(EXIT_FAILURE);
-    }
-}
-// execute command
-
-// debug
 
 // command class member function
 string command::which_type()
