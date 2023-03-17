@@ -45,8 +45,24 @@ public:
 
 void init_env();
 void print_env(const char *const para);
+
+inline void init_pipe(int *fd);
+inline void reduce_num_pipes(vector<command> &number_pipes, int last);
+inline void init_temp_fd(vector<int *> &temp_fd_arr, size_t s);
+void collect_num_pipe_output(vector<command> &cmds, vector<int *> &temp_fd_arr, size_t &temp_id, size_t i);
+inline void close_pipe(vector<command> &cmds);
+inline void close_temp_pipe(vector<int *> &temp_fd_arr);
+inline void reduce_num_by_nl(vector<command> &cmds);
+char **vector_to_c_str_arr(vector<string> cmd);
+
+void exe_command(int stdout_copy, vector<command> &cmds, int i, bool stop_pipe, int temp_fd[]);
+void exe_pipe(int stdout_copy, vector<command> &cmds, int i, bool stop_pipe, int temp_fd[]);
+void exe_err_pipe(int stdout_copy, vector<command> &cmds, int i, bool stop_pipe, int temp_fd[]);
+void exe_f_red(int stdout_copy, vector<command> &cmds, int i, int temp_fd[]);
+void exe_num_pipe(int stdout_copy, vector<command> &cmds, int i, bool stop_pipe, int temp_fd[]);
+void exe_err_num_pipe(int stdout_copy, vector<command> &cmds, int i, bool stop_pipe, int temp_fd[]);
 void exe_bin(vector<command> &cmds);
 
 void print_cmds(vector<command> cmds);
-void init_pipe(int *fd);
+
 #endif
