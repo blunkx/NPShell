@@ -17,21 +17,8 @@ void exe_bin(vector<command> &cmds)
         {
             init_pipe(cmds[i].fd);
             collect_num_pipe_output(cmds, temp_fd_arr, temp_id, i);
-        }
-        if ((cmds[i].pipe_type == NUM_PIPE || cmds[i].pipe_type == ERR_NUM_PIPE))
-            reduce_num_pipes(cmds, i);
-
-        if (debug_output)
-        {
-            cout << "temp_read: " << temp_fd_arr[temp_id][0] << endl;
-            cout << "temp_write: " << temp_fd_arr[temp_id][1] << endl;
-            cout << i << "th pipe" << endl;
-            print_cmds(cmds);
-            cout << endl
-                 << endl;
-        }
-        if (!cmds[i].is_exe)
-        {
+            if ((cmds[i].pipe_type == NUM_PIPE || cmds[i].pipe_type == ERR_NUM_PIPE))
+                reduce_num_pipes(cmds, i);
             pid_t pid;
             pid = fork();
             if (pid == -1)
@@ -136,8 +123,6 @@ inline void init_pipe(int *fd)
 
 inline void reduce_num_pipes(vector<command> &number_pipes, int last)
 {
-    if (number_pipes[last].is_exe)
-        return;
     for (int i = 0; i <= last; i++)
     {
         if (number_pipes[i].pipe_num > 0)
