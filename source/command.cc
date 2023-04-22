@@ -16,6 +16,13 @@ void exe_bin(vector<command> &cmds)
         if (!cmds[i].is_exe)
         {
             init_pipe(cmds[i].fd);
+        }
+    }
+    for (size_t i = 0; i < cmds.size(); i++)
+    {
+        if (!cmds[i].is_exe)
+        {
+            print_cmds(cmds);
             collect_num_pipe_output(cmds, temp_fd_arr, temp_id, i);
             if ((cmds[i].pipe_type == NUM_PIPE || cmds[i].pipe_type == ERR_NUM_PIPE))
                 reduce_num_pipes(cmds, i);
@@ -28,27 +35,27 @@ void exe_bin(vector<command> &cmds)
             }
             else if (pid == 0)
             {
-                //  child process
+                //  child processs
                 close_unused_pipe_in_child(cmds, i);
                 switch (cmds[i].pipe_type)
                 {
                 case NO_PIPE:
-                    exe_command(stdout_copy, cmds, i, stop_pipe, temp_fd_arr[temp_id]);
+                    exe_command(dup(STDOUT_FILENO), cmds, i, stop_pipe, temp_fd_arr[temp_id]);
                     break;
                 case PIPE:
-                    exe_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd_arr[temp_id]);
+                    exe_pipe(dup(STDOUT_FILENO), cmds, i, stop_pipe, temp_fd_arr[temp_id]);
                     break;
                 case ERR_PIPE:
-                    exe_err_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd_arr[temp_id]);
+                    exe_err_pipe(dup(STDOUT_FILENO), cmds, i, stop_pipe, temp_fd_arr[temp_id]);
                     break;
                 case F_RED_PIPE:
-                    exe_f_red(stdout_copy, cmds, i, temp_fd_arr[temp_id]);
+                    exe_f_red(dup(STDOUT_FILENO), cmds, i, temp_fd_arr[temp_id]);
                     break;
                 case NUM_PIPE:
-                    exe_num_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd_arr[temp_id]);
+                    exe_num_pipe(dup(STDOUT_FILENO), cmds, i, stop_pipe, temp_fd_arr[temp_id]);
                     break;
                 case ERR_NUM_PIPE:
-                    exe_err_num_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd_arr[temp_id]);
+                    exe_err_num_pipe(dup(STDOUT_FILENO), cmds, i, stop_pipe, temp_fd_arr[temp_id]);
                     break;
                 default:
                     exit(EXIT_FAILURE);
@@ -401,7 +408,11 @@ void exe_num_pipe(int stdout_copy, vector<command> &cmds, int i, bool stop_pipe,
     }
     close(temp_fd[0]);
     close(temp_fd[1]);
-    dup2(cmds[i].fd[1], STDOUT_FILENO); // stdout refer to p2[1]
+    int check = dup2(cmds[i].fd[1], STDOUT_FILENO); // stdout refer to p2[1]
+    if (check == -1)
+    {
+        perror("Error: ");
+    }
     close(cmds[i].fd[1]);
     char **args = vector_to_c_str_arr(cmds[i].cmd);
     if (execvp(args[0], args) == -1)
