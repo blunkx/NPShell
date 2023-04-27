@@ -22,7 +22,7 @@ void exe_bin(vector<command> &cmds)
     {
         if (!cmds[i].is_exe)
         {
-            print_cmds(cmds);
+            // print_cmds(cmds);
             collect_num_pipe_output(cmds, temp_fd_arr, temp_id, i);
             if ((cmds[i].pipe_type == NUM_PIPE || cmds[i].pipe_type == ERR_NUM_PIPE))
                 reduce_num_pipes(cmds, i);
@@ -40,22 +40,22 @@ void exe_bin(vector<command> &cmds)
                 switch (cmds[i].pipe_type)
                 {
                 case NO_PIPE:
-                    exe_command(dup(STDOUT_FILENO), cmds, i, stop_pipe, temp_fd_arr[temp_id]);
+                    exe_command(stdout_copy, cmds, i, stop_pipe, temp_fd_arr[temp_id]);
                     break;
                 case PIPE:
-                    exe_pipe(dup(STDOUT_FILENO), cmds, i, stop_pipe, temp_fd_arr[temp_id]);
+                    exe_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd_arr[temp_id]);
                     break;
                 case ERR_PIPE:
-                    exe_err_pipe(dup(STDOUT_FILENO), cmds, i, stop_pipe, temp_fd_arr[temp_id]);
+                    exe_err_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd_arr[temp_id]);
                     break;
                 case F_RED_PIPE:
-                    exe_f_red(dup(STDOUT_FILENO), cmds, i, temp_fd_arr[temp_id]);
+                    exe_f_red(stdout_copy, cmds, i, temp_fd_arr[temp_id]);
                     break;
                 case NUM_PIPE:
-                    exe_num_pipe(dup(STDOUT_FILENO), cmds, i, stop_pipe, temp_fd_arr[temp_id]);
+                    exe_num_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd_arr[temp_id]);
                     break;
                 case ERR_NUM_PIPE:
-                    exe_err_num_pipe(dup(STDOUT_FILENO), cmds, i, stop_pipe, temp_fd_arr[temp_id]);
+                    exe_err_num_pipe(stdout_copy, cmds, i, stop_pipe, temp_fd_arr[temp_id]);
                     break;
                 default:
                     exit(EXIT_FAILURE);
